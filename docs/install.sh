@@ -1,13 +1,13 @@
 #!/bin/sh
 # aoraki-cli installer
 #
-#   curl -fsSL https://sarsondigital.github.io/aoraki-cli/install.sh | sh
+#   curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh
 #
 # Detects OS/arch, downloads the latest release binary from GitHub, and
 # installs it to /usr/local/bin (sudo only if that directory needs it).
 set -eu
 
-REPO="SarsonDigital/aoraki-cli"
+REPO="SF-Digital-Labs/aoraki-cli"
 INSTALL_DIR="${AORAKI_INSTALL_DIR:-/usr/local/bin}"
 
 os="$(uname -s)"
