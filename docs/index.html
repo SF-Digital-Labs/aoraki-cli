@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>manifest — deploy CLI for the Manifest Network</title>
+  <meta name="description" content="Heroku-style deploys for Manifest Network boxes. Push a commit, watch it build, see it live — reported to the Aoraki console." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0e13'/%3E%3Cg transform='translate(4,4)'%3E%3Cpath d='M12 3.5 L3.5 20 L20.5 20 L15.4 10.1' stroke='%2358c5d6' stroke-width='1.9' stroke-linejoin='round' stroke-linecap='round' fill='none'/%3E%3Cpath d='M13.7 6.8 L24 2.9 L24 10.7 Z' fill='%2358c5d6' fill-opacity='0.35'/%3E%3Cpath d='M13.7 6.8 L24 4.7 L24 8.9 Z' fill='%2358c5d6' fill-opacity='0.95'/%3E%3C/g%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0a0e13; --bg-raised: #10151c; --border: #212b37;
+      --text: #e2e9f2; --dim: #8595a8; --accent: #58c5d6;
+      --accent-soft: rgba(88, 197, 214, 0.12); --ok: #4ade80;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 16px/1.65 -apple-system, "Segoe UI", system-ui, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 20px 80px;
+    }
+    main { max-width: 780px; width: 100%; }
+    header { text-align: center; padding: 72px 0 28px; }
+    .mark { width: 64px; height: 64px; }
+    h1 { font-size: 40px; letter-spacing: -0.02em; margin-top: 14px; }
+    h1 .dim { color: var(--dim); font-weight: 400; }
+    .tagline { color: var(--dim); font-size: 19px; margin-top: 8px; }
+    .install {
+      margin: 34px auto 8px; background: var(--bg-raised);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 18px 20px; text-align: left; position: relative;
+    }
+    .install code { font-family: var(--mono); font-size: 15px; color: var(--accent); word-break: break-all; }
+    .install .lbl { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); display: block; margin-bottom: 8px; }
+    .copy {
+      position: absolute; top: 14px; right: 14px; cursor: pointer;
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--dim); font-size: 12px; padding: 4px 10px;
+    }
+    .copy:hover { color: var(--text); border-color: var(--accent); }
+    .note { color: var(--dim); font-size: 13.5px; text-align: center; }
+    .note a { color: var(--accent); }
+    section { margin-top: 52px; }
+    h2 { font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; }
+    p { color: var(--text); }
+    p.d { color: var(--dim); }
+    pre {
+      background: var(--bg-raised); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px; overflow-x: auto;
+      font-family: var(--mono); font-size: 14px; line-height: 1.8; margin: 14px 0;
+    }
+    pre .c { color: var(--dim); }
+    pre .a { color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+    td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    td:first-child { font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+    td:last-child { color: var(--dim); }
+    .links { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
+    .links a {
+      color: var(--text); text-decoration: none; background: var(--bg-raised);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px;
+      font-size: 14.5px;
+    }
+    .links a:hover { border-color: var(--accent); color: var(--accent); }
+    footer { margin-top: 70px; color: var(--dim); font-size: 13px; text-align: center; }
+    footer a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3.5 L3.5 20 L20.5 20 L15.4 10.1" stroke="#58c5d6" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M13.7 6.8 L24 2.9 L24 10.7 Z" fill="#58c5d6" fill-opacity="0.35"/>
+      <path d="M13.7 6.8 L24 4.7 L24 8.9 Z" fill="#58c5d6" fill-opacity="0.95"/>
+    </svg>
+    <h1>manifest <span class="dim">/ the Manifest Network CLI</span></h1>
+    <p class="tagline">Heroku-style deploys for Manifest Network boxes. Push a commit, watch it build, see it live.</p>
+    <div class="install">
+      <span class="lbl">Install</span>
+      <code id="cmd">curl -fsSL https://cli.manifest.network/install.sh | sh</code>
+      <button class="copy" onclick="navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(()=>{this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)})">copy</button>
+    </div>
+    <p class="note">macOS (Apple&nbsp;Silicon &amp; Intel) and Linux x64 · or <a href="https://github.com/manifest-network/aoraki-cli#install">build from source</a></p>
+  </header>
+
+  <section>
+    <h2>What it does</h2>
+    <p class="d">
+      <b style="color:var(--text)">manifest</b> deploys your app to the Manifest Network and keeps you close to it
+      afterwards: stream build output as it happens, tail live pod logs, check what's deployed
+      against your local HEAD, and roll a restart without a rebuild. Every deploy is recorded on
+      the box and reported to the <a href="https://aoraki.manifest.network" style="color:var(--accent)">Aoraki console</a>,
+      so your team sees who shipped what, where, and when. Only committed code deploys — there is
+      deliberately no way to push an uncommitted working tree.
+    </p>
+  </section>
+
+  <section>
+    <h2>Quick start</h2>
+    <pre><span class="c"># 1. Connect to your Aoraki console (opens the tokens page — paste a token)</span>
+<span class="a">aoraki login</span> --url https://aoraki.manifest.network/api/v1
+
+<span class="c"># 2. Describe your app once — aoraki.toml at the app root</span>
+<span class="a">aoraki link</span>      <span class="c"># sets up the deploy target (idempotent)</span>
+<span class="a">aoraki doctor</span>    <span class="c"># preflight the whole chain end-to-end</span>
+
+<span class="c"># 3. Ship</span>
+<span class="a">aoraki deploy</span> staging
+<span class="a">aoraki logs</span> staging -f</pre>
+  </section>
+
+  <section>
+    <h2>Commands</h2>
+    <table>
+      <tr><td>aoraki login</td><td>connect this machine to an Aoraki console — supports multiple consoles (company, personal) as named remotes</td></tr>
+      <tr><td>aoraki deploy [env]</td><td>push and deploy; production environments require typed confirmation</td></tr>
+      <tr><td>aoraki logs [env] -f</td><td>follow application logs from the running pods</td></tr>
+      <tr><td>aoraki status [env]</td><td>deployed commit vs local HEAD, pod readiness, drift</td></tr>
+      <tr><td>aoraki deploys</td><td>recent deploy history</td></tr>
+      <tr><td>aoraki run [env] -- cmd</td><td>one-off command in a pod with the deployed image</td></tr>
+      <tr><td>aoraki restart [env]</td><td>rolling restart without a build</td></tr>
+      <tr><td>aoraki doctor</td><td>verify SSH, hooks, docker, kubectl, console token — with fix hints</td></tr>
+      <tr><td>aoraki whoami</td><td>which account each stored token belongs to</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Links</h2>
+    <div class="links">
+      <a href="https://github.com/manifest-network/aoraki-cli">GitHub — source &amp; releases</a>
+      <a href="https://aoraki.manifest.network">Aoraki console</a>
+      <a href="https://manifest.network">Manifest Network</a>
+    </div>
+  </section>
+
+  <footer>
+    Tokens are created in the <a href="https://aoraki.manifest.network/cli">Aoraki console</a> and expire after
+    90&nbsp;days without use · every CLI call extends them.
+  </footer>
+</main>
+</body>
+</html>

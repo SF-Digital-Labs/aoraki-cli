@@ -1,0 +1,28 @@
+# ~/.config/aoraki/config.toml — per-user settings, never committed to app repos.
+
+# Aoraki consoles ("remotes") — written by `aoraki login`, one section per
+# console so a single machine can deploy to company and personal clouds.
+# Tokens come from the console's CLI page (shown once) and expire after
+# 90 days unused; every CLI call restarts that clock.
+[remotes.company]
+api_url = "https://aoraki.manifest.network/api/v1"   # aoraki-server base URL incl. /api/v1
+token = "cli_REPLACE_ME"
+
+#[remotes.personal]
+#api_url = "https://aoraki.example.dev/api/v1"
+#token = "cli_REPLACE_ME"
+
+# Customer deploy gateway (aoraki-cli-api) — used by transport = "gateway" envs.
+[gateway]
+api_url = "https://cli.manifest.network/api/v1"
+token = "cli_REPLACE_ME"             # or set the MANIFEST_TOKEN env var (agents/CI)
+
+# Servers not already in ~/.ssh/config (ssh config aliases take precedence —
+# if `ssh lab` works in your terminal, you don't need an entry here).
+#[servers.lab]
+#host = "203.0.113.10"
+#user = "deploy"
+
+[defaults]
+environment = "staging"              # what bare `aoraki deploy` targets
+remote = "company"                   # which console gets deploy events (per-env override: remote = "…" in aoraki.toml)

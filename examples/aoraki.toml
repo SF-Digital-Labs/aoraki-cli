@@ -1,0 +1,25 @@
+# aoraki.toml — committed at the app repo root.
+# Maps environments to boxes; matches manifest-internal-docs conventions.
+
+[app]
+name = "agent1"                      # k8s namespace base, image name
+# repo = "acme/agent1"               # GitHub owner/name — required for gateway transport
+
+[environments.staging]
+server = "lab"                       # ssh alias (~/.ssh/config) or [servers] key in global config
+branch = "qa"                        # the only ref the deploy hook accepts for this env
+namespace = "agent1-stg"
+deploy_script = "k8s/scripts/build-and-deploy-stg.sh"
+url = "https://agent1-stg.manifest.network"
+# workdir = "/data/repos/agent1"     # optional, defaults to /data/repos/<app>
+
+[environments.production]
+server = "core2"
+branch = "prod"
+namespace = "agent1"
+deploy_script = "k8s/scripts/build-and-deploy.sh"
+url = "https://agent1.manifest.network"
+confirm = true                       # require typing "production" before deploying
+# transport = "gateway"              # customer path: deploy via aoraki-cli-api
+# remote = "personal"                # report deploys to a different Aoraki console
+                                     # (default "direct" = internal SSH push, ADR 006)
