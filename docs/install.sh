@@ -1,14 +1,14 @@
 #!/bin/sh
-# aoraki-cli installer — https://cli.manifest.network
+# aoraki-cli installer
 #
-#   curl -fsSL https://cli.manifest.network/install.sh | sh
+#   curl -fsSL https://sarsondigital.github.io/aoraki-cli/install.sh | sh
 #
 # Detects OS/arch, downloads the latest release binary from GitHub, and
 # installs it to /usr/local/bin (sudo only if that directory needs it).
 set -eu
 
-REPO="manifest-network/aoraki-cli"
-INSTALL_DIR="${MANIFEST_INSTALL_DIR:-/usr/local/bin}"
+REPO="SarsonDigital/aoraki-cli"
+INSTALL_DIR="${AORAKI_INSTALL_DIR:-/usr/local/bin}"
 
 os="$(uname -s)"
 arch="$(uname -m)"
@@ -51,5 +51,5 @@ fi
 echo "✓ installed: $("$INSTALL_DIR/aoraki" --version 2>/dev/null || echo aoraki)"
 echo
 echo "Next steps:"
-echo "  manifest login --url https://aoraki.manifest.network/api/v1"
+echo "  aoraki login --url https://aoraki.manifest.network/api/v1"
 echo "  aoraki --help"

@@ -24,10 +24,10 @@ Full product spec: `infrastructure/aoraki-cli-spec.md` in the manifest-internal-
 One-liner (macOS Apple Silicon/Intel, Linux x64 — grabs the latest release):
 
 ```bash
-curl -fsSL https://cli.manifest.network/install.sh | sh
+curl -fsSL https://sarsondigital.github.io/aoraki-cli/install.sh | sh
 ```
 
-Or download a binary from [Releases](https://github.com/manifest-network/aoraki-cli/releases),
+Or download a binary from [Releases](https://github.com/SarsonDigital/aoraki-cli/releases),
 or build from source:
 
 ```bash
@@ -35,7 +35,7 @@ cargo build --release
 cp target/release/aoraki /usr/local/bin/    # or anywhere on PATH
 ```
 
-Docs & landing page: [cli.manifest.network](https://cli.manifest.network)
+Docs & landing page: [sarsondigital.github.io/aoraki-cli](https://sarsondigital.github.io/aoraki-cli) (interim — product domain TBD, ADR 011)
 (served from `docs/` via GitHub Pages; releases are built by
 `.github/workflows/release.yml` on version tags).
 
