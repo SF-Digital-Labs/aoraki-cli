@@ -5,7 +5,7 @@
 # Tokens come from the console's CLI page (shown once) and expire after
 # 90 days unused; every CLI call restarts that clock.
 [remotes.company]
-api_url = "https://aoraki.manifest.network/api/v1"   # aoraki-server base URL incl. /api/v1
+api_url = "https://aoraki.cloud/api/v1"   # aoraki-server base URL incl. /api/v1
 token = "cli_REPLACE_ME"
 
 #[remotes.personal]
@@ -14,7 +14,7 @@ token = "cli_REPLACE_ME"
 
 # Customer deploy gateway (aoraki-cli-api) — used by transport = "gateway" envs.
 [gateway]
-api_url = "https://cli.manifest.network/api/v1"
+api_url = "https://cli.aoraki.cloud/api/v1"
 token = "cli_REPLACE_ME"             # or set the MANIFEST_TOKEN env var (agents/CI)
 
 # Servers not already in ~/.ssh/config (ssh config aliases take precedence —

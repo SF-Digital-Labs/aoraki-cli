@@ -51,5 +51,5 @@ fi
 echo "✓ installed: $("$INSTALL_DIR/aoraki" --version 2>/dev/null || echo aoraki)"
 echo
 echo "Next steps:"
-echo "  aoraki login --url https://aoraki.manifest.network/api/v1"
+echo "  aoraki login --url https://aoraki.cloud/api/v1"
 echo "  aoraki --help"

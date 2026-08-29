@@ -94,7 +94,7 @@
       <b style="color:var(--text)">aoraki</b> deploys your app to the Aoraki cloud and keeps you close to it
       afterwards: stream build output as it happens, tail live pod logs, check what's deployed
       against your local HEAD, and roll a restart without a rebuild. Every deploy is recorded on
-      the box and reported to the <a href="https://aoraki.manifest.network" style="color:var(--accent)">Aoraki console</a>,
+      the box and reported to the <a href="https://aoraki.cloud" style="color:var(--accent)">Aoraki console</a>,
       so your team sees who shipped what, where, and when. Only committed code deploys — there is
       deliberately no way to push an uncommitted working tree.
     </p>
@@ -103,7 +103,7 @@
   <section>
     <h2>Quick start</h2>
     <pre><span class="c"># 1. Connect to your Aoraki console (opens the tokens page — paste a token)</span>
-<span class="a">aoraki login</span> --url https://aoraki.manifest.network/api/v1
+<span class="a">aoraki login</span> --url https://aoraki.cloud/api/v1
 
 <span class="c"># 2. Describe your app once — aoraki.toml at the app root</span>
 <span class="a">aoraki link</span>      <span class="c"># sets up the deploy target (idempotent)</span>
@@ -133,12 +133,12 @@
     <h2>Links</h2>
     <div class="links">
       <a href="https://github.com/SF-Digital-Labs/aoraki-cli">GitHub — source &amp; releases</a>
-      <a href="https://aoraki.manifest.network">Aoraki console</a>
+      <a href="https://aoraki.cloud">Aoraki console</a>
     </div>
   </section>
 
   <footer>
-    Tokens are created in the <a href="https://aoraki.manifest.network/cli">Aoraki console</a> and expire after
+    Tokens are created in the <a href="https://aoraki.cloud/cli">Aoraki console</a> and expire after
     90&nbsp;days without use · every CLI call extends them.
   </footer>
 </main>

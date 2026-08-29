@@ -60,7 +60,7 @@ Server addresses not in `~/.ssh/config` and a default environment also live in t
 Each console you deploy through is a named *remote* — company cloud, personal cloud, staging console:
 
 ```bash
-aoraki login company  --url https://aoraki.manifest.network/api/v1
+aoraki login company  --url https://aoraki.cloud/api/v1
 aoraki login personal --url https://aoraki.example.dev/api/v1
 aoraki whoami                       # who each token maps to (also extends the 90-day window)
 aoraki logout personal              # forget the local token (revoke in the console too if needed)
@@ -69,7 +69,7 @@ aoraki logout personal              # forget the local token (revoke in the cons
 ```toml
 # ~/.config/aoraki/config.toml (written by `aoraki login`)
 [remotes.company]
-api_url = "https://aoraki.manifest.network/api/v1"
+api_url = "https://aoraki.cloud/api/v1"
 token = "cli_…"
 
 [remotes.personal]

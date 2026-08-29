@@ -17,7 +17,7 @@ pub enum Command {
     Login {
         /// Remote name, e.g. company / personal (default: sole or [defaults].remote)
         remote: Option<String>,
-        /// Aoraki API URL (e.g. https://aoraki.manifest.network/api/v1) — required for a new remote
+        /// Aoraki API URL (e.g. https://aoraki.cloud/api/v1) — required for a new remote
         #[arg(long)]
         url: Option<String>,
         /// Don't open the browser; just prompt for the token

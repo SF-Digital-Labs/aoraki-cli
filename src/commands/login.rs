@@ -62,7 +62,7 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
 }
 
 /// The console origin for an API url: strip everything after the host, so
-/// https://aoraki.manifest.network/api/v1 → https://aoraki.manifest.network
+/// https://aoraki.cloud/api/v1 → https://aoraki.cloud
 fn console_base(api_url: &str) -> String {
     if let Some(scheme_end) = api_url.find("://") {
         if let Some(path_start) = api_url[scheme_end + 3..].find('/') {
