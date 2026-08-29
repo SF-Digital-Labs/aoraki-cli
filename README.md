@@ -1,6 +1,6 @@
 # Aoraki CLI
 
-Heroku-style deploys straight to your own servers. Push code from your laptop straight to a server, run its build-and-deploy pipeline, stream the logs back, and report the deploy to the Aoraki console.
+Ship code to the Aoraki cloud from your terminal — by hand or by agent. One command pushes your commit to a server, runs its build-and-deploy pipeline, streams the logs back, and reports the deploy to the Aoraki console.
 
 ```
 aoraki deploy staging      # push HEAD → box builds → k3s rolls out, logs stream live

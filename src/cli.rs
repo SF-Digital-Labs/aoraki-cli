@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "aoraki",
     version,
-    about = "Aoraki — deploy code straight to your servers, Heroku-style"
+    about = "Aoraki — ship code to the Aoraki cloud, by hand or by agent"
 )]
 pub struct Cli {
     #[command(subcommand)]

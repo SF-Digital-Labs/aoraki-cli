@@ -2,7 +2,7 @@
 name = "aoraki-cli"
 version = "0.1.0"
 edition = "2021"
-description = "Aoraki — Heroku-style deploys straight to your servers"
+description = "Aoraki — ship code to the Aoraki cloud from your terminal"
 license = "MIT"
 
 [[bin]]
