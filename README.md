@@ -1,6 +1,6 @@
-# Manifest CLI
+# Aoraki CLI
 
-Heroku-style deploys for Manifest Network boxes. Push code from your laptop straight to a server, run its build-and-deploy pipeline, stream the logs back, and report the deploy to the Aoraki console.
+Heroku-style deploys straight to your own servers. Push code from your laptop straight to a server, run its build-and-deploy pipeline, stream the logs back, and report the deploy to the Aoraki console.
 
 ```
 aoraki deploy staging      # push HEAD → box builds → k3s rolls out, logs stream live

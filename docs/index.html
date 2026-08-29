@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>manifest — deploy CLI for the Manifest Network</title>
-  <meta name="description" content="Heroku-style deploys for Manifest Network boxes. Push a commit, watch it build, see it live — reported to the Aoraki console." />
+  <title>aoraki — Heroku-style deploys straight to your servers</title>
+  <meta name="description" content="Aoraki is the SF Digital deploy CLI. Push a commit, watch it build on your own servers, see it live — every deploy reported to the Aoraki console." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0e13'/%3E%3Cg transform='translate(4,4)'%3E%3Cpath d='M12 3.5 L3.5 20 L20.5 20 L15.4 10.1' stroke='%2358c5d6' stroke-width='1.9' stroke-linejoin='round' stroke-linecap='round' fill='none'/%3E%3Cpath d='M13.7 6.8 L24 2.9 L24 10.7 Z' fill='%2358c5d6' fill-opacity='0.35'/%3E%3Cpath d='M13.7 6.8 L24 4.7 L24 8.9 Z' fill='%2358c5d6' fill-opacity='0.95'/%3E%3C/g%3E%3C/svg%3E" />
   <style>
     :root {
@@ -75,8 +75,8 @@
       <path d="M13.7 6.8 L24 2.9 L24 10.7 Z" fill="#58c5d6" fill-opacity="0.35"/>
       <path d="M13.7 6.8 L24 4.7 L24 8.9 Z" fill="#58c5d6" fill-opacity="0.95"/>
     </svg>
-    <h1>manifest <span class="dim">/ the Manifest Network CLI</span></h1>
-    <p class="tagline">Heroku-style deploys for Manifest Network boxes. Push a commit, watch it build, see it live.</p>
+    <h1>aoraki <span class="dim">/ the Aoraki deploy CLI</span></h1>
+    <p class="tagline">Heroku-style deploys, straight to your own servers. Push a commit, watch it build, see it live.</p>
     <div class="install">
       <span class="lbl">Install</span>
       <code id="cmd">curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh</code>
@@ -88,7 +88,7 @@
   <section>
     <h2>What it does</h2>
     <p class="d">
-      <b style="color:var(--text)">manifest</b> deploys your app to the Manifest Network and keeps you close to it
+      <b style="color:var(--text)">aoraki</b> deploys your app to your own servers and keeps you close to them
       afterwards: stream build output as it happens, tail live pod logs, check what's deployed
       against your local HEAD, and roll a restart without a rebuild. Every deploy is recorded on
       the box and reported to the <a href="https://aoraki.manifest.network" style="color:var(--accent)">Aoraki console</a>,
@@ -131,7 +131,6 @@
     <div class="links">
       <a href="https://github.com/SF-Digital-Labs/aoraki-cli">GitHub — source &amp; releases</a>
       <a href="https://aoraki.manifest.network">Aoraki console</a>
-      <a href="https://manifest.network">Manifest Network</a>
     </div>
   </section>
 
