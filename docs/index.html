@@ -81,6 +81,9 @@
       <span class="lbl">Install</span>
       <code id="cmd">curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh</code>
       <button class="copy" onclick="navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(()=>{this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)})">copy</button>
+      <span class="lbl" style="margin-top:16px">Or Homebrew</span>
+      <code id="cmd2">brew install sf-digital-labs/tap/aoraki</code>
+      <button class="copy" style="top:auto;bottom:14px" onclick="navigator.clipboard.writeText(document.getElementById('cmd2').textContent).then(()=>{this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)})">copy</button>
     </div>
     <p class="note">macOS (Apple&nbsp;Silicon &amp; Intel) and Linux x64 · or <a href="https://github.com/SF-Digital-Labs/aoraki-cli#install">build from source</a></p>
   </header>

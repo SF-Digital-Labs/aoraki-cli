@@ -27,6 +27,12 @@ One-liner (macOS Apple Silicon/Intel, Linux x64 — grabs the latest release):
 curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh
 ```
 
+Or via Homebrew:
+
+```bash
+brew install sf-digital-labs/tap/aoraki
+```
+
 Or download a binary from [Releases](https://github.com/SF-Digital-Labs/aoraki-cli/releases),
 or build from source:
 
