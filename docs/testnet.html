@@ -83,9 +83,9 @@ curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh</code></
 
   <section>
     <h2>3 · Connect the CLI</h2>
-    <p>In the console, open <b>CLI&nbsp;tokens</b> and mint a token, then:</p>
+    <p>In the console, open <b>CLI&nbsp;keys</b> and create a key, then:</p>
     <pre><code>aoraki login testnet --url https://testnet.aoraki.cloud/api/v1
-<span class="c"># paste the cli_… token when prompted, then verify:</span>
+<span class="c"># paste the cli_… key when prompted, then verify:</span>
 aoraki whoami testnet</code></pre>
     <p class="d">This adds a <code>testnet</code> remote alongside any others in <code>~/.config/aoraki/config.toml</code> — one CLI, many environments, picked per command with <code>--remote</code>.</p>
   </section>
@@ -127,7 +127,7 @@ aoraki launch --remote testnet --image ghcr.io/you/yourapp:v1 --port 8080</code>
   <section>
     <h2>Testnet URLs</h2>
     <table>
-      <tr><td><a href="https://testnet.aoraki.cloud">testnet.aoraki.cloud</a></td><td>Aoraki console — accounts, orgs, deployments, CLI tokens</td></tr>
+      <tr><td><a href="https://testnet.aoraki.cloud">testnet.aoraki.cloud</a></td><td>Aoraki console — accounts, orgs, deployments, CLI keys</td></tr>
       <tr><td>testnet.aoraki.cloud/api/v1</td><td>Console API — what the CLI talks to (<code>aoraki login --url</code> this)</td></tr>
       <tr><td><a href="https://testnet-cli.aoraki.cloud">testnet-cli.aoraki.cloud</a></td><td>Deploy gateway (GitHub-App repo deploys — box pipeline)</td></tr>
       <tr><td><a href="https://testnet-blockchain.manifest.network">testnet-blockchain.manifest.network</a></td><td>Testnet block explorer — see your leases and PWR burns on-chain</td></tr>
