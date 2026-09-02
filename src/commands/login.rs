@@ -1,6 +1,6 @@
-//! `aoraki login [remote] [--url …]` — the paste-a-token flow (v1; the
+//! `aoraki login [remote] [--url …]` — the paste-a-key flow (v1; the
 //! device flow can replace the paste step later without changing config).
-//! Opens the console's CLI tokens page, validates the pasted token against
+//! Opens the console's CLI keys page, validates the pasted key against
 //! GET /cli/me, then writes it into ~/.config/aoraki/config.toml.
 
 use crate::{aoraki, config};
@@ -25,25 +25,25 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
 
     let tokens_page = format!("{}/cli", console_base(&api_url));
     println!("Log in to '{name}' ({api_url})");
-    println!("Create a CLI token in the console: {tokens_page}");
+    println!("Create a CLI key in the console: {tokens_page}");
     if !no_browser {
         let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
         let _ = std::process::Command::new(opener).arg(&tokens_page).status();
     }
 
-    print!("Paste token (cli_…): ");
+    print!("Paste key (cli_…): ");
     std::io::stdout().flush()?;
     let mut token = String::new();
     std::io::stdin()
         .lock()
         .read_line(&mut token)
-        .context("reading token from stdin")?;
+        .context("reading key from stdin")?;
     let token = token.trim();
     if token.is_empty() {
-        bail!("no token entered");
+        bail!("no key entered");
     }
     if !token.starts_with("cli_") {
-        bail!("that doesn't look like a CLI token (they start with cli_)");
+        bail!("that doesn't look like a CLI key (they start with cli_)");
     }
 
     let identity = aoraki::whoami(&api_url, token)?;
@@ -51,7 +51,7 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
     config::write_remote(&name, &api_url, Some(token))?;
     let expires = identity.expires_at.split('T').next().unwrap_or_default();
     println!(
-        "✓ logged in to '{}' as {} (org: {}, token: {})",
+        "✓ logged in to '{}' as {} (org: {}, key: {})",
         name,
         identity.user.as_deref().unwrap_or("you"),
         identity.org,

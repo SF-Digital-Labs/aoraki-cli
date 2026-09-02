@@ -13,20 +13,20 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Connect this machine to an Aoraki console (opens the tokens page, paste a token)
+    /// Connect this machine to an Aoraki console (opens the CLI keys page, paste a key)
     Login {
         /// Remote name, e.g. company / personal (default: sole or [defaults].remote)
         remote: Option<String>,
         /// Aoraki API URL (e.g. https://aoraki.cloud/api/v1) — required for a new remote
         #[arg(long)]
         url: Option<String>,
-        /// Don't open the browser; just prompt for the token
+        /// Don't open the browser; just prompt for the key
         #[arg(long)]
         no_browser: bool,
     },
-    /// Forget the stored token for a remote (the remote itself is kept)
+    /// Forget the stored key for a remote (the remote itself is kept)
     Logout { remote: Option<String> },
-    /// Show configured remotes and who each token belongs to
+    /// Show configured remotes and who each key belongs to
     Whoami {
         /// Check just this remote (default: all)
         remote: Option<String>,

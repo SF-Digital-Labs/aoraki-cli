@@ -22,7 +22,7 @@ pub struct DeployEvent {
     pub cli_version: String,
 }
 
-/// Who a CLI token belongs to, from GET /cli/me.
+/// Who a CLI key belongs to, from GET /cli/me.
 #[derive(Deserialize)]
 pub struct Identity {
     pub user: Option<String>,
@@ -42,7 +42,7 @@ pub fn report(global: &GlobalConfig, remote_pref: Option<&str>, event: &DeployEv
         }
     };
     let Some(token) = &cfg.token else {
-        eprintln!("note: remote '{name}' has no token — run `aoraki login {name}`");
+        eprintln!("note: remote '{name}' has no key — run `aoraki login {name}`");
         return;
     };
     flush_pending(name, &cfg.api_url, token);
@@ -55,7 +55,7 @@ pub fn report(global: &GlobalConfig, remote_pref: Option<&str>, event: &DeployEv
     }
 }
 
-/// Validate a token and name its owner. Any call counts as usage on the
+/// Validate a key and name its owner. Any call counts as usage on the
 /// server, restarting the 90-day idle-expiry clock.
 pub fn whoami(api_url: &str, token: &str) -> Result<Identity> {
     let response = ureq::get(&format!("{}/cli/me", api_url.trim_end_matches('/')))
@@ -71,7 +71,7 @@ pub fn whoami(api_url: &str, token: &str) -> Result<Identity> {
             Ok(res.into_json::<Envelope>()?.data)
         }
         Err(ureq::Error::Status(401 | 403, _)) => {
-            bail!("token rejected — it may be revoked or expired (90 days unused)")
+            bail!("key rejected — it may be revoked or expired (90 days unused)")
         }
         Err(err) => bail!("could not reach aoraki: {err}"),
     }

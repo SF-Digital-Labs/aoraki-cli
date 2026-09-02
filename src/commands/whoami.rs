@@ -1,6 +1,6 @@
-//! `aoraki whoami [remote]` — which account each stored token maps to.
+//! `aoraki whoami [remote]` — which account each stored key maps to.
 //! Also a liveness probe: a passing check counts as usage and extends the
-//! token's 90-day idle window.
+//! key's 90-day idle window.
 
 use crate::{aoraki, config};
 use anyhow::Result;
@@ -25,7 +25,7 @@ pub fn run(remote: Option<String>) -> Result<()> {
                 Ok(id) => {
                     let expires = id.expires_at.split('T').next().unwrap_or_default();
                     println!(
-                        "{name}: {} — {} (org: {}, token: {}, extended to {})",
+                        "{name}: {} — {} (org: {}, key: {}, extended to {})",
                         cfg.api_url,
                         id.user.as_deref().unwrap_or("you"),
                         id.org,
