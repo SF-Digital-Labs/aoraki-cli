@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>aoraki testnet — tester's quickstart</title>
+  <meta name="description" content="Everything a tester needs to deploy on the Aoraki cloud testnet: install the CLI, connect a testnet account, and ship a container to a live URL in one command." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0e13'/%3E%3Cg transform='translate(4,4)'%3E%3Cpath d='M12 3.5 L3.5 20 L20.5 20 L15.4 10.1' stroke='%2358c5d6' stroke-width='1.9' stroke-linejoin='round' stroke-linecap='round' fill='none'/%3E%3Cpath d='M13.7 6.8 L24 2.9 L24 10.7 Z' fill='%2358c5d6' fill-opacity='0.35'/%3E%3Cpath d='M13.7 6.8 L24 4.7 L24 8.9 Z' fill='%2358c5d6' fill-opacity='0.95'/%3E%3C/g%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0a0e13; --bg-raised: #10151c; --border: #212b37;
+      --text: #e2e9f2; --dim: #8595a8; --accent: #58c5d6;
+      --accent-soft: rgba(88, 197, 214, 0.12); --ok: #4ade80; --warn: #fbbf24;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 16px/1.65 -apple-system, "Segoe UI", system-ui, sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 20px 80px;
+    }
+    main { max-width: 780px; width: 100%; }
+    header { text-align: center; padding: 72px 0 28px; }
+    h1 { font-size: 40px; letter-spacing: -0.02em; margin-top: 14px; }
+    h1 .dim { color: var(--dim); font-weight: 400; }
+    .badge {
+      display: inline-block; margin-top: 10px; padding: 3px 12px;
+      border: 1px solid var(--accent); border-radius: 999px;
+      color: var(--accent); font-size: 12px; letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .tagline { color: var(--dim); font-size: 19px; margin-top: 12px; }
+    section { margin-top: 52px; }
+    h2 { font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px; }
+    p { color: var(--text); margin: 10px 0; }
+    p.d { color: var(--dim); }
+    a { color: var(--accent); }
+    pre {
+      background: var(--bg-raised); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px; overflow-x: auto;
+      font-family: var(--mono); font-size: 14px; line-height: 1.8; margin: 14px 0;
+    }
+    pre .c { color: var(--dim); }
+    pre .a { color: var(--accent); }
+    pre .o { color: var(--ok); }
+    table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+    td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    td:first-child { font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+    td:last-child { color: var(--dim); }
+    .rules { border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+    .rules li { color: var(--dim); margin: 6px 0 6px 16px; }
+    .rules b { color: var(--text); }
+    .links { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
+    .links a {
+      border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px;
+      color: var(--text); text-decoration: none; font-size: 14.5px;
+    }
+    .links a:hover { border-color: var(--accent); background: var(--accent-soft); }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>aoraki <span class="dim">testnet</span></h1>
+    <div class="badge">tester's quickstart</div>
+    <p class="tagline">Ship a container to a live HTTPS URL on the Manifest testnet — play money, real infrastructure.</p>
+  </header>
+
+  <section>
+    <h2>1 · Install the CLI</h2>
+    <pre><code>brew install sf-digital-labs/tap/aoraki
+<span class="c"># or, without Homebrew:</span>
+curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh</code></pre>
+    <p class="d">Needs v0.2.0 or newer for <code>aoraki launch</code> — check with <code>aoraki --version</code>.</p>
+  </section>
+
+  <section>
+    <h2>2 · Create a testnet account</h2>
+    <p>Open <a href="https://testnet.aoraki.cloud">testnet.aoraki.cloud</a>, sign in (wallet login), and create an org — that org owns everything you deploy.</p>
+    <p class="d">Testnet accounts are free: your org's wallet is auto-funded with testnet PWR by the platform treasury. No real money exists here.</p>
+  </section>
+
+  <section>
+    <h2>3 · Connect the CLI</h2>
+    <p>In the console, open <b>CLI&nbsp;tokens</b> and mint a token, then:</p>
+    <pre><code>aoraki login testnet --url https://testnet.aoraki.cloud/api/v1
+<span class="c"># paste the cli_… token when prompted, then verify:</span>
+aoraki whoami testnet</code></pre>
+    <p class="d">This adds a <code>testnet</code> remote alongside any others in <code>~/.config/aoraki/config.toml</code> — one CLI, many environments, picked per command with <code>--remote</code>.</p>
+  </section>
+
+  <section>
+    <h2>4 · Deploy something</h2>
+    <p>A known-good demo image, live in about 15 seconds:</p>
+    <pre><code>aoraki launch --remote testnet \
+  --image traefik/whoami:v1.10 --port 8080 \
+  --env WHOAMI_PORT_NUMBER=8080
+
+<span class="c">launching 'whoami' → traefik/whoami:v1.10 (org: …, remote: testnet)</span>
+<span class="c">deployment dpl_… registered — waiting for the lease…</span>
+<span class="c">lease 01a0… active — 28800 µPWR/hr</span>
+<span class="o">live: https://web-xxxxxxx.barney11.testnet.manifest0.net/</span></code></pre>
+    <p>Your deployment, its lease, and its hourly PWR cost all appear in the console under your org.</p>
+  </section>
+
+  <section>
+    <h2>5 · Deploy your own image</h2>
+    <p>Build and push anywhere public, then launch it:</p>
+    <pre><code>docker buildx build --platform linux/amd64 -t ghcr.io/you/yourapp:v1 --push .
+aoraki launch --remote testnet --image ghcr.io/you/yourapp:v1 --port 8080</code></pre>
+    <div class="rules">
+      <b>Image contract</b> — the testnet provider rejects anything else:
+      <li><b>Public registry only</b>: docker.io or ghcr.io, anonymously pullable (on ghcr, flip the package to Public after the first push)</li>
+      <li><b>linux/amd64</b> — build with <code>--platform linux/amd64</code> on Apple Silicon</li>
+      <li><b>Runs as non-root</b> — no writing outside <code>/tmp</code>, no privileged setup</li>
+      <li><b>Listens on a port &gt; 1024</b> (non-root can't bind 80) — pass it as <code>--port</code></li>
+    </div>
+  </section>
+
+  <section>
+    <h2>6 · Custom domains</h2>
+    <pre><code>aoraki launch --remote testnet --image … --port … --domain yoursite.com</code></pre>
+    <p class="d">The domain is claimed on-chain for your lease. Point DNS at the printed FQDN — <code>CNAME yoursite.com → web-….testnet.manifest0.net</code>, <b>DNS only</b> (no proxy) so the certificate can issue. If HTTPS hasn't come up a few minutes after DNS resolves, restart the deployment from the console to retrigger issuance.</p>
+  </section>
+
+  <section>
+    <h2>Testnet URLs</h2>
+    <table>
+      <tr><td><a href="https://testnet.aoraki.cloud">testnet.aoraki.cloud</a></td><td>Aoraki console — accounts, orgs, deployments, CLI tokens</td></tr>
+      <tr><td>testnet.aoraki.cloud/api/v1</td><td>Console API — what the CLI talks to (<code>aoraki login --url</code> this)</td></tr>
+      <tr><td><a href="https://testnet-cli.aoraki.cloud">testnet-cli.aoraki.cloud</a></td><td>Deploy gateway (GitHub-App repo deploys — box pipeline)</td></tr>
+      <tr><td><a href="https://testnet-blockchain.manifest.network">testnet-blockchain.manifest.network</a></td><td>Testnet block explorer — see your leases and PWR burns on-chain</td></tr>
+      <tr><td>nodes.liftedinit.tech/manifest/testnet/api</td><td>Testnet chain LCD (REST) endpoint</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Links</h2>
+    <div class="links">
+      <a href="./">CLI docs</a>
+      <a href="https://github.com/SF-Digital-Labs/aoraki-cli">GitHub</a>
+      <a href="https://testnet.aoraki.cloud">Testnet console</a>
+    </div>
+  </section>
+</main>
+</body>
+</html>
