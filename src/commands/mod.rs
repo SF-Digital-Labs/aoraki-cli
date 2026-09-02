@@ -3,6 +3,7 @@ mod connect;
 mod deploy;
 mod deploys;
 mod doctor;
+mod launch;
 mod link;
 mod login;
 mod logout;
@@ -28,6 +29,23 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Link => link::run(),
         Command::Connect { provider } => connect::run(provider),
         Command::Deploy { env, git_ref } => deploy::run(env, git_ref),
+        Command::Launch {
+            image,
+            port,
+            name,
+            env,
+            size,
+            domain,
+            remote,
+        } => launch::run(launch::LaunchArgs {
+            image,
+            port,
+            name,
+            env,
+            size,
+            domain,
+            remote,
+        }),
         Command::Logs {
             env,
             target,

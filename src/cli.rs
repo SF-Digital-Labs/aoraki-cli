@@ -46,6 +46,30 @@ pub enum Command {
         #[arg(long = "ref")]
         git_ref: Option<String>,
     },
+    /// Deploy a container image to the Aoraki cloud (lease on the Manifest network)
+    Launch {
+        /// Container image, e.g. ghcr.io/acme/site:v1 (public registry: docker.io / ghcr.io)
+        #[arg(long)]
+        image: String,
+        /// Port the container listens on
+        #[arg(long)]
+        port: u16,
+        /// Deployment name (default: image basename)
+        #[arg(long)]
+        name: Option<String>,
+        /// Environment variable KEY=VALUE (repeatable)
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env: Vec<String>,
+        /// SKU size name on the target chain
+        #[arg(long, default_value = "docker-xlarge-storage")]
+        size: String,
+        /// Custom domain to claim on-chain once live (e.g. site.example.com)
+        #[arg(long)]
+        domain: Option<String>,
+        /// Remote console to target, e.g. testnet / company (default: [defaults].remote)
+        #[arg(long)]
+        remote: Option<String>,
+    },
     /// Show application logs from the running pods
     Logs {
         env: Option<String>,
