@@ -111,7 +111,7 @@ aoraki whoami testnet</code></pre>
 aoraki launch --remote testnet --image ghcr.io/you/yourapp:v1 --port 8080</code></pre>
     <div class="rules">
       <b>Image contract</b> — the testnet provider rejects anything else:
-      <li><b>Public registry only</b>: docker.io or ghcr.io, anonymously pullable (on ghcr, flip the package to Public after the first push)</li>
+      <li><b>Allowed registries</b>: docker.io, ghcr.io, or the platform registry <code>registry.aoraki.cloud</code> — images must be anonymously pullable (on ghcr, flip the package to Public after the first push; platform-registry push access is provisioned by the Aoraki team)</li>
       <li><b>linux/amd64</b> — build with <code>--platform linux/amd64</code> on Apple Silicon</li>
       <li><b>Runs as non-root</b> — no writing outside <code>/tmp</code>, no privileged setup</li>
       <li><b>Listens on a port &gt; 1024</b> (non-root can't bind 80) — pass it as <code>--port</code></li>
