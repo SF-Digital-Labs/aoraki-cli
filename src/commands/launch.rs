@@ -106,7 +106,18 @@ pub fn run(args: LaunchArgs) -> Result<()> {
         }
     }
     let fqdn = fqdn.context("timed out waiting for the lease — check `deployments` in the console")?;
-    println!("live: https://{fqdn}/");
+    // Aoraki teal (#58c5d6) via truecolor; degrades to plain text elsewhere.
+    let teal = "\x1b[38;2;88;197;214m";
+    let bold = "\x1b[1m";
+    let dim = "\x1b[2m";
+    let reset = "\x1b[0m";
+    let console_base = api.trim_end_matches("/api/v1");
+    println!();
+    println!("{teal}{bold}  ✓ DEPLOYED{reset}");
+    println!("{teal}  ──────────────────────────────────────────{reset}");
+    println!("  live     {teal}{bold}https://{fqdn}/{reset}");
+    println!("  monitor  {dim}{console_base}/deployments/{dep_hex}{reset}");
+    println!("{teal}  ──────────────────────────────────────────{reset}");
 
     if let Some(domain) = &args.domain {
         post(
