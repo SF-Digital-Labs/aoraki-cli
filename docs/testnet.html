@@ -64,21 +64,20 @@
   <header>
     <h1>aoraki <span class="dim">testnet</span></h1>
     <div class="badge">tester's quickstart</div>
-    <p class="tagline">Ship a container to a live HTTPS URL on the Manifest testnet — play money, real infrastructure.</p>
+    <p class="tagline">Ship a container to a live HTTPS URL on the Aoraki testnet — play money, real infrastructure.</p>
   </header>
 
   <section>
-    <h2>1 · Install the CLI</h2>
-    <pre><code>brew install sf-digital-labs/tap/aoraki
-<span class="c"># or, without Homebrew:</span>
-curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh</code></pre>
-    <p class="d">Needs v0.2.0 or newer for <code>aoraki launch</code> — check with <code>aoraki --version</code>.</p>
+    <h2>1 · Create a testnet account</h2>
+    <p>Open <a href="https://testnet.aoraki.cloud" target="_blank" rel="noreferrer">testnet.aoraki.cloud</a>, sign in (wallet login), and create an org — that org owns everything you deploy.</p>
+    <p class="d">Testnet accounts are free: your org's wallet is auto-funded with testnet PWR by the platform treasury. No real money exists here.</p>
   </section>
 
   <section>
-    <h2>2 · Create a testnet account</h2>
-    <p>Open <a href="https://testnet.aoraki.cloud">testnet.aoraki.cloud</a>, sign in (wallet login), and create an org — that org owns everything you deploy.</p>
-    <p class="d">Testnet accounts are free: your org's wallet is auto-funded with testnet PWR by the platform treasury. No real money exists here.</p>
+    <h2>2 · Install the CLI</h2>
+    <pre><code>brew install sf-digital-labs/tap/aoraki
+<span class="c"># or, without Homebrew:</span>
+curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh</code></pre>
   </section>
 
   <section>
@@ -127,10 +126,10 @@ aoraki launch --remote testnet --image ghcr.io/you/yourapp:v1 --port 8080</code>
   <section>
     <h2>Testnet URLs</h2>
     <table>
-      <tr><td><a href="https://testnet.aoraki.cloud">testnet.aoraki.cloud</a></td><td>Aoraki console — accounts, orgs, deployments, CLI keys</td></tr>
+      <tr><td><a href="https://testnet.aoraki.cloud" target="_blank" rel="noreferrer">testnet.aoraki.cloud</a></td><td>Aoraki console — accounts, orgs, deployments, CLI keys</td></tr>
       <tr><td>testnet.aoraki.cloud/api/v1</td><td>Console API — what the CLI talks to (<code>aoraki login --url</code> this)</td></tr>
-      <tr><td><a href="https://testnet-cli.aoraki.cloud">testnet-cli.aoraki.cloud</a></td><td>Deploy gateway (GitHub-App repo deploys — box pipeline)</td></tr>
-      <tr><td><a href="https://testnet-blockchain.manifest.network">testnet-blockchain.manifest.network</a></td><td>Testnet block explorer — see your leases and PWR burns on-chain</td></tr>
+      <tr><td><a href="https://testnet-cli.aoraki.cloud" target="_blank" rel="noreferrer">testnet-cli.aoraki.cloud</a></td><td>Deploy gateway (GitHub-App repo deploys — box pipeline)</td></tr>
+      <tr><td><a href="https://testnet-blockchain.manifest.network" target="_blank" rel="noreferrer">testnet-blockchain.manifest.network</a></td><td>Testnet block explorer — see your leases and PWR burns on-chain</td></tr>
       <tr><td>nodes.liftedinit.tech/manifest/testnet/api</td><td>Testnet chain LCD (REST) endpoint</td></tr>
     </table>
   </section>
@@ -139,8 +138,8 @@ aoraki launch --remote testnet --image ghcr.io/you/yourapp:v1 --port 8080</code>
     <h2>Links</h2>
     <div class="links">
       <a href="./">CLI docs</a>
-      <a href="https://github.com/SF-Digital-Labs/aoraki-cli">GitHub</a>
-      <a href="https://testnet.aoraki.cloud">Testnet console</a>
+      <a href="https://github.com/SF-Digital-Labs/aoraki-cli" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://testnet.aoraki.cloud" target="_blank" rel="noreferrer">Testnet console</a>
     </div>
   </section>
 </main>
