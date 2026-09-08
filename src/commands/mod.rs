@@ -3,6 +3,7 @@ mod connect;
 mod deploy;
 mod deploys;
 mod doctor;
+mod gpus;
 mod launch;
 mod link;
 mod login;
@@ -36,6 +37,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             env,
             size,
             domain,
+            gpu,
             remote,
         } => launch::run(launch::LaunchArgs {
             image,
@@ -44,8 +46,10 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             env,
             size,
             domain,
+            gpu,
             remote,
         }),
+        Command::Gpus { remote } => gpus::run(remote),
         Command::Logs {
             env,
             target,

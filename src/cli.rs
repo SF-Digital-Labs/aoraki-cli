@@ -66,7 +66,17 @@ pub enum Command {
         /// Custom domain to claim on-chain once live (e.g. site.example.com)
         #[arg(long)]
         domain: Option<String>,
+        /// Deploy onto a GPU. Bare `--gpu` lets the system pick the cheapest
+        /// available GPU; `--gpu "RTX 4090"` pins a model (see `aoraki gpus`)
+        #[arg(long, num_args = 0..=1, default_missing_value = "auto", value_name = "MODEL")]
+        gpu: Option<String>,
         /// Remote console to target, e.g. testnet / company (default: [defaults].remote)
+        #[arg(long)]
+        remote: Option<String>,
+    },
+    /// List GPUs available to deploy on (models, VRAM, $/hr, availability)
+    Gpus {
+        /// Remote console to target (default: [defaults].remote)
         #[arg(long)]
         remote: Option<String>,
     },

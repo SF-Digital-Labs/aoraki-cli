@@ -2,6 +2,7 @@ mod aoraki;
 mod cli;
 mod commands;
 mod config;
+mod console;
 mod context;
 mod gateway;
 mod hook;
