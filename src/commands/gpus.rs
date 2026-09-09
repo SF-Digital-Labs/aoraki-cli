@@ -43,3 +43,13 @@ pub fn logs(id: String, remote: Option<String>) -> Result<()> {
     }
     Ok(())
 }
+
+/// `aoraki gpu-rm <id>` — un-deploy a GPU workload and stop its per-hour
+/// billing. Always succeeds org-side; a provider that already lost the job
+/// is cleaned up regardless.
+pub fn rm(id: String, remote: Option<String>) -> Result<()> {
+    let console = Console::connect(remote.as_deref())?;
+    console.delete(&format!("/orgs/{}/gpu-deploys/{}", console.org_hex, id))?;
+    println!("✓ un-deployed {id} — billing stopped");
+    Ok(())
+}

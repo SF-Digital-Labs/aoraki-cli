@@ -88,6 +88,14 @@ pub enum Command {
         #[arg(long)]
         remote: Option<String>,
     },
+    /// Un-deploy a GPU workload and stop its per-hour billing
+    GpuRm {
+        /// GPU deployment id (gpu_...) — shown by `launch --gpu` and the console
+        id: String,
+        /// Remote console to target (default: [defaults].remote)
+        #[arg(long)]
+        remote: Option<String>,
+    },
     /// Show application logs from the running pods
     Logs {
         env: Option<String>,

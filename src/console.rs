@@ -78,6 +78,15 @@ impl Console {
                 .send_json(body.clone()),
         )
     }
+
+    pub fn delete(&self, path: &str) -> Result<Value> {
+        parse(
+            self.agent
+                .delete(&format!("{}{path}", self.api))
+                .set("Authorization", &format!("Bearer {}", self.token))
+                .call(),
+        )
+    }
 }
 
 fn parse(resp: std::result::Result<ureq::Response, ureq::Error>) -> Result<Value> {
