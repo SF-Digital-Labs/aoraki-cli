@@ -32,3 +32,14 @@ pub fn run(remote: Option<String>) -> Result<()> {
     println!("billing runs per-hour for the whole time a GPU deployment exists — un-deploy when done");
     Ok(())
 }
+
+/// `aoraki gpu-logs <id>` — container logs for a GPU deployment.
+pub fn logs(id: String, remote: Option<String>) -> Result<()> {
+    let console = Console::connect(remote.as_deref())?;
+    let resp = console.get(&format!("/orgs/{}/gpu-deploys/{}/logs", console.org_hex, id))?;
+    match resp["data"]["logs"].as_str() {
+        Some(logs) if !logs.is_empty() => println!("{logs}"),
+        _ => println!("no logs available yet — the workload may still be starting"),
+    }
+    Ok(())
+}

@@ -80,6 +80,14 @@ pub enum Command {
         #[arg(long)]
         remote: Option<String>,
     },
+    /// Show container logs for a GPU deployment (hashrate, crashes, startup)
+    GpuLogs {
+        /// GPU deployment id (gpu_...) — shown by `launch --gpu` and the console
+        id: String,
+        /// Remote console to target (default: [defaults].remote)
+        #[arg(long)]
+        remote: Option<String>,
+    },
     /// Show application logs from the running pods
     Logs {
         env: Option<String>,

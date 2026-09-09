@@ -50,6 +50,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             remote,
         }),
         Command::Gpus { remote } => gpus::run(remote),
+        Command::GpuLogs { id, remote } => gpus::logs(id, remote),
         Command::Logs {
             env,
             target,
