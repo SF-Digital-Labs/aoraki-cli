@@ -115,6 +115,32 @@
   </section>
 
   <section>
+    <h2>GPU deploys</h2>
+    <p class="d">
+      Rent a GPU by the hour and run any public container image on it — inference servers,
+      training jobs, render workers. Browse the catalog, launch, and un-deploy when done.
+    </p>
+    <pre><span class="c"># models, VRAM, hourly pricing, live availability</span>
+<span class="a">aoraki gpus</span>
+
+<span class="c"># launch on the cheapest available card</span>
+<span class="a">aoraki launch</span> --image docker.io/you/inference:v1 --port 8000 --gpu
+
+<span class="c"># or pin a model — quote names with spaces, as listed by `aoraki gpus`</span>
+<span class="a">aoraki launch</span> --image docker.io/you/inference:v1 --port 8000 --gpu <span class="a">"RTX 3060 12GB"</span>
+
+<span class="c"># container logs · un-deploy (ids are printed at launch and shown in the console)</span>
+<span class="a">aoraki gpu-logs</span> gpu_…
+<span class="a">aoraki gpu-rm</span> gpu_…</pre>
+    <p class="d">
+      Bake models and weights into your image — GPU nodes don't guarantee outbound network,
+      so runtime downloads may fail. Endpoints are plain HTTP on the node's port (no TLS/domain
+      layer yet). Billing runs per-hour from launch until <code style="font-family:var(--mono)">aoraki gpu-rm</code> —
+      un-deploy workloads you're not using.
+    </p>
+  </section>
+
+  <section>
     <h2>Commands</h2>
     <table>
       <tr><td>aoraki login</td><td>connect this machine to an Aoraki console — supports multiple consoles (company, personal) as named remotes</td></tr>
@@ -123,6 +149,10 @@
       <tr><td>aoraki status [env]</td><td>deployed commit vs local HEAD, pod readiness, drift</td></tr>
       <tr><td>aoraki deploys</td><td>recent deploy history</td></tr>
       <tr><td>aoraki run [env] -- cmd</td><td>one-off command in a pod with the deployed image</td></tr>
+      <tr><td>aoraki gpus</td><td>GPU catalog — models, VRAM, $/hr, live availability</td></tr>
+      <tr><td>aoraki launch --gpu</td><td>deploy a container image onto a GPU (bare = cheapest available, or pin a model)</td></tr>
+      <tr><td>aoraki gpu-logs id</td><td>container logs for a GPU deployment</td></tr>
+      <tr><td>aoraki gpu-rm id</td><td>un-deploy a GPU workload and stop its per-hour billing</td></tr>
       <tr><td>aoraki restart [env]</td><td>rolling restart without a build</td></tr>
       <tr><td>aoraki doctor</td><td>verify SSH, hooks, docker, kubectl, console token — with fix hints</td></tr>
       <tr><td>aoraki whoami</td><td>which account each stored token belongs to</td></tr>

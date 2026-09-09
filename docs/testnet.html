@@ -124,6 +124,28 @@ aoraki launch --remote testnet --image ghcr.io/you/yourapp:v1 --port 8080</code>
   </section>
 
   <section>
+    <h2>7 · GPU deploys</h2>
+    <p>Rent a GPU by the hour and run a container on it — see the catalog, launch, un-deploy:</p>
+    <pre><code><span class="c"># models, VRAM, hourly pricing, live availability</span>
+aoraki gpus --remote testnet
+
+<span class="c"># cheapest available card, or pin a model — quote names with spaces,</span>
+<span class="c"># written as `aoraki gpus` lists them</span>
+aoraki launch --remote testnet --image ghcr.io/you/inference:v1 --port 8000 --gpu
+aoraki launch --remote testnet --image ghcr.io/you/inference:v1 --port 8000 --gpu <span class="a">"RTX 3060 12GB"</span>
+
+<span class="c"># container logs · un-deploy (the gpu_… id is printed at launch)</span>
+aoraki gpu-logs gpu_… --remote testnet
+aoraki gpu-rm gpu_… --remote testnet</code></pre>
+    <div class="rules">
+      <b>GPU workload contract</b> — beyond the image rules above:
+      <li><b>Self-contained images</b> — bake models/weights in; GPU nodes don't guarantee outbound network, so runtime downloads may fail</li>
+      <li><b>Plain HTTP</b> — GPU endpoints are exposed on the node's port directly, no TLS/domain layer yet</li>
+      <li><b>Billing runs per-hour</b> from launch until <code>aoraki gpu-rm</code> — un-deploy workloads you're not using</li>
+    </div>
+  </section>
+
+  <section>
     <h2>Testnet URLs</h2>
     <table>
       <tr><td><a href="https://testnet.aoraki.cloud" target="_blank" rel="noreferrer">testnet.aoraki.cloud</a></td><td>Aoraki console — accounts, orgs, deployments, CLI keys</td></tr>
