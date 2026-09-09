@@ -128,6 +128,7 @@ pub fn run(args: LaunchArgs) -> Result<()> {
     // status line; transient failures display as reconnecting and never
     // kill the wait — only the overall timeout does.
     let mut fqdn = None;
+    let mut default_domain: Option<String> = None;
     let mut consecutive_failures = 0u32;
     let line = StatusLine::new();
     for _attempt in 0..POLL_ATTEMPTS {
@@ -158,6 +159,7 @@ pub fn run(args: LaunchArgs) -> Result<()> {
                 line.finish();
                 let cost = d["hourly_cost_upwr"].as_i64().unwrap_or(0);
                 println!("lease {lease} active — {cost} µPWR/hr");
+                default_domain = d["default_domain"].as_str().map(String::from);
                 let live = console
                     .get(&format!("/orgs/{}/deployments/{dep_hex}/live", console.org_hex))?;
                 fqdn = live["data"]["connection"]["fqdn"]
@@ -171,13 +173,21 @@ pub fn run(args: LaunchArgs) -> Result<()> {
     }
     line.finish();
     let fqdn = fqdn.context("timed out waiting for the lease — check `deployments` in the console")?;
-    print_banner(
-        "DEPLOYED",
-        &[
-            ("live", format!("{TEAL}{BOLD}https://{fqdn}/{RESET}")),
-            ("monitor", format!("{DIM}{}/deployments/{dep_hex}{RESET}", console.console_base())),
-        ],
-    );
+    // The branded default domain is assigned server-side just as the lease
+    // goes active; it may not be on the row the instant we read it, so fall
+    // back to the origin fqdn and mention it's still provisioning.
+    let live_url = match &default_domain {
+        Some(d) => format!("{TEAL}{BOLD}https://{d}/{RESET}"),
+        None => format!("{TEAL}{BOLD}https://{fqdn}/{RESET}"),
+    };
+    let mut rows = vec![
+        ("live", live_url),
+        ("monitor", format!("{DIM}{}/deployments/{dep_hex}{RESET}", console.console_base())),
+    ];
+    if default_domain.is_some() {
+        rows.push(("origin", format!("{DIM}{fqdn}{RESET}")));
+    }
+    print_banner("DEPLOYED", &rows);
 
     if let Some(domain) = &args.domain {
         console.post(
