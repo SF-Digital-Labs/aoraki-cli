@@ -261,7 +261,12 @@ fn run_gpu(
             }
             "cancelled" => {
                 line.finish();
-                bail!("gpu deploy was cancelled");
+                match d["error"].as_str().filter(|s| !s.is_empty()) {
+                    Some(err) => bail!("gpu deploy was cancelled — {err}"),
+                    None => bail!(
+                        "gpu deploy was cancelled by the provider (no reason given) — try another GPU (`aoraki gpus`)"
+                    ),
+                }
             }
             "running" => {
                 if let Some(url) = d["node_url"].as_str() {
