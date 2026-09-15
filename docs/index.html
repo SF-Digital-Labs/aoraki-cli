@@ -144,18 +144,23 @@
     <h2>Commands</h2>
     <table>
       <tr><td>aoraki login</td><td>connect this machine to an Aoraki console — supports multiple consoles (company, personal) as named remotes</td></tr>
+      <tr><td>aoraki logout</td><td>forget the stored key for a remote (the remote itself is kept)</td></tr>
+      <tr><td>aoraki whoami</td><td>which account each stored token belongs to</td></tr>
+      <tr><td>aoraki link</td><td>set up bare repos + deploy hooks on each configured server (idempotent)</td></tr>
+      <tr><td>aoraki connect github</td><td>connect an external provider (one-time) so repo-based deploys can build your code</td></tr>
       <tr><td>aoraki deploy [env]</td><td>push and deploy; production environments require typed confirmation</td></tr>
+      <tr><td>aoraki launch --image … --port …</td><td>deploy a container image to the Aoraki cloud (on-chain lease); add --gpu for GPU compute (bare = cheapest available, or pin a model)</td></tr>
       <tr><td>aoraki logs [env] -f</td><td>follow application logs from the running pods</td></tr>
       <tr><td>aoraki status [env]</td><td>deployed commit vs local HEAD, pod readiness, drift</td></tr>
       <tr><td>aoraki deploys</td><td>recent deploy history</td></tr>
       <tr><td>aoraki run [env] -- cmd</td><td>one-off command in a pod with the deployed image</td></tr>
+      <tr><td>aoraki restart [env]</td><td>rolling restart without a build</td></tr>
+      <tr><td>aoraki open [env]</td><td>open the environment's URL in the browser</td></tr>
+      <tr><td>aoraki config [env]</td><td>configmap/secret keys for the environment (names only, never values)</td></tr>
       <tr><td>aoraki gpus</td><td>GPU catalog — models, VRAM, $/hr, live availability</td></tr>
-      <tr><td>aoraki launch --gpu</td><td>deploy a container image onto a GPU (bare = cheapest available, or pin a model)</td></tr>
       <tr><td>aoraki gpu-logs id</td><td>container logs for a GPU deployment</td></tr>
       <tr><td>aoraki gpu-rm id</td><td>un-deploy a GPU workload and stop its per-hour billing</td></tr>
-      <tr><td>aoraki restart [env]</td><td>rolling restart without a build</td></tr>
       <tr><td>aoraki doctor</td><td>verify SSH, hooks, docker, kubectl, console token — with fix hints</td></tr>
-      <tr><td>aoraki whoami</td><td>which account each stored token belongs to</td></tr>
     </table>
   </section>
 
