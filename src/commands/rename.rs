@@ -27,6 +27,13 @@ pub fn run(old: String, new: String) -> Result<()> {
         bail!("a remote named '{new}' already exists");
     }
     let was_default = global.defaults.remote.as_deref() == Some(old.as_str());
+    // Machine-written pins use the immutable org id when we know it —
+    // local names are for humans at the shell, not committed files.
+    let replacement = global
+        .remotes
+        .get(&old)
+        .and_then(|c| c.org_id.clone())
+        .unwrap_or_else(|| new.clone());
     config::rename_remote(&old, &new)?;
     println!("✓ remote '{old}' is now '{new}'");
     if was_default {
@@ -34,13 +41,13 @@ pub fn run(old: String, new: String) -> Result<()> {
     }
 
     // Fix pins in the repo we're standing in (working-tree edit — commit it).
-    match update_repo_pins(&old, &new)? {
+    match update_repo_pins(&old, &replacement)? {
         Some((path, 0)) => println!(
             "  {} has no remote = \"{old}\" pins — nothing to update there",
             path.display()
         ),
         Some((path, n)) => println!(
-            "  updated {n} pin{} in {} — commit that change",
+            "  updated {n} pin{} in {} to \"{replacement}\" — commit that change",
             if n == 1 { "" } else { "s" },
             path.display()
         ),

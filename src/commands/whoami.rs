@@ -49,14 +49,11 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
             Some(token) => match aoraki::whoami(&cfg.api_url, token) {
                 Ok(id) => {
                     let expires = id.expires_at.split('T').next().unwrap_or_default();
-                    let org_label = match &id.org_hex {
-                        Some(hex) => format!("{} [{hex}]", id.org),
-                        None => id.org.clone(),
-                    };
                     println!(
-                        "{marker} {name}: {} — {} (org: {org_label}, key: {}, extended to {})",
+                        "{marker} {name}: {} — {} (org: {}, key: {}, extended to {})",
                         cfg.api_url,
                         id.user.as_deref().unwrap_or("you"),
+                        id.org,
                         id.token_name,
                         expires,
                     );
