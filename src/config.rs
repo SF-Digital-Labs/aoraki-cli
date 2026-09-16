@@ -249,6 +249,36 @@ pub fn write_remote(name: &str, api_url: &str, token: Option<&str>) -> Result<()
     Ok(())
 }
 
+/// Rename a remote in config.toml, carrying its url/token and re-pointing
+/// [defaults].remote if it referenced the old name.
+pub fn rename_remote(old: &str, new: &str) -> Result<()> {
+    let path = config_home().join("config.toml");
+    let text =
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    let remotes = doc
+        .get_mut("remotes")
+        .and_then(|r| r.as_table_mut())
+        .context("no [remotes] in config.toml")?;
+    let entry = remotes.remove(old).context("remote vanished mid-rename")?;
+    remotes.insert(new, entry);
+    if let Some(defaults) = doc.get_mut("defaults").and_then(|d| d.as_table_mut()) {
+        if defaults.get("remote").and_then(|v| v.as_str()) == Some(old) {
+            defaults["remote"] = toml_edit::value(new);
+        }
+    }
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("writing {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
 /// Set [defaults].remote in config.toml (toml_edit keeps comments intact).
 pub fn write_default_remote(name: &str) -> Result<()> {
     let dir = config_home();

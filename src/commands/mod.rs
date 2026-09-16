@@ -10,6 +10,7 @@ mod login;
 mod logout;
 mod logs;
 mod open;
+mod rename;
 mod restart;
 mod run;
 mod status;
@@ -26,6 +27,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             no_browser,
         } => login::run(remote, url, no_browser),
         Command::Logout { remote } => logout::run(remote),
+        Command::Rename { old, new } => rename::run(old, new),
         Command::Whoami { remote, default } => whoami::run(remote, default),
         Command::Link => link::run(),
         Command::Connect { provider } => connect::run(provider),

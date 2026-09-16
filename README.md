@@ -59,12 +59,17 @@ Server addresses not in `~/.ssh/config` and a default environment also live in t
 
 Each console you deploy through is a named *remote* — company cloud, personal cloud, staging console:
 
+A remote is an org identity (org @ console), so remotes are *named after
+the org*: log in without a name and the CLI names the remote from the org
+behind your key (SarsonDigital → `sarsondigital`).
+
 ```bash
-aoraki login                        # mainnet console by default — the customer path
-aoraki login testnet --url https://testnet.aoraki.cloud/api/v1
+aoraki login                        # mainnet; new remote auto-named after your org
+aoraki login sarson-testnet --url https://testnet.aoraki.cloud/api/v1
 aoraki whoami                       # remotes + who each key maps to; → marks the default
-aoraki whoami --default testnet     # re-point the default ([defaults].remote)
-aoraki logout testnet               # forget the local token (revoke in the console too if needed)
+aoraki whoami --default sarson-testnet   # re-point the default ([defaults].remote)
+aoraki rename prod sarsondigital    # migrate an old name (env pins in aoraki.toml too)
+aoraki logout sarson-testnet        # forget the local token (revoke in the console too)
 ```
 
 ```toml
@@ -91,6 +96,7 @@ sole configured remote.
 |---|---|
 | `aoraki login [remote] [--url …]` | Connect to an Aoraki console (paste-a-token; mainnet unless --url) |
 | `aoraki logout [remote]` | Forget the stored token |
+| `aoraki rename <old> <new>` | Rename a remote (names follow the org) |
 | `aoraki whoami [remote] [--default <r>]` | Remotes + who each key maps to; → the default; `--default` re-points it |
 | `aoraki link` | Set up bare repos + deploy hooks on the boxes (idempotent) |
 | `aoraki deploy [env] [--ref <commit>]` | Push and deploy; production envs require typed confirmation |

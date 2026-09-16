@@ -27,6 +27,13 @@ pub enum Command {
     },
     /// Forget the stored key for a remote (the remote itself is kept)
     Logout { remote: Option<String> },
+    /// Rename a remote (e.g. after the org: `aoraki rename prod sarsondigital`)
+    Rename {
+        /// Current remote name
+        old: String,
+        /// New name
+        new: String,
+    },
     /// Who this CLI is: remotes, the account behind each key, → the default
     Whoami {
         /// Check just this remote (default: all)
