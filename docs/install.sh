@@ -1,7 +1,7 @@
 #!/bin/sh
 # aoraki-cli installer
 #
-#   curl -fsSL https://sf-digital-labs.github.io/aoraki-cli/install.sh | sh
+#   curl -fsSL https://cli.aoraki.cloud/install.sh | sh
 #
 # Detects OS/arch, downloads the latest release binary from GitHub, and
 # installs it to /usr/local/bin (sudo only if that directory needs it).
@@ -29,7 +29,7 @@ esac
 
 echo "→ aoraki-cli installer (${target})"
 
-url="https://github.com/$REPO/releases/latest/download/aoraki-$target.tar.gz"
+url="https://cli.aoraki.cloud/download/$target"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
