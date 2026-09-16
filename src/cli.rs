@@ -49,7 +49,7 @@ pub enum Command {
         /// Provider to connect (currently: github)
         provider: String,
     },
-    /// Push a commit to a box and run its build-and-deploy pipeline
+    /// Ship this repo's code to its environment (prebuilt image? see `aoraki launch`)
     Deploy {
         /// Target environment from aoraki.toml (default: global default or sole env)
         env: Option<String>,
@@ -57,7 +57,7 @@ pub enum Command {
         #[arg(long = "ref")]
         git_ref: Option<String>,
     },
-    /// Deploy a container image to the Aoraki cloud (lease on the Manifest network)
+    /// Run a prebuilt container image in the Aoraki cloud (from source? see `aoraki deploy`)
     Launch {
         /// Container image, e.g. ghcr.io/acme/site:v1 (public registry: docker.io / ghcr.io)
         #[arg(long)]
