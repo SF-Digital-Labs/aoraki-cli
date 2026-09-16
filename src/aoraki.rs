@@ -27,6 +27,10 @@ pub struct DeployEvent {
 pub struct Identity {
     pub user: Option<String>,
     pub org: String,
+    /// Immutable public org id (org_…) — the strongest aoraki.toml pin;
+    /// optional for servers predating it.
+    #[serde(default)]
+    pub org_hex: Option<String>,
     pub token_name: String,
     pub expires_at: String,
 }

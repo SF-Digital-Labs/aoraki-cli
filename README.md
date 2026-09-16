@@ -89,9 +89,11 @@ remote = "company"                    # used when an environment doesn't pin one
 Deploy events go to one remote per environment: `remote = "…"` in an
 environment's section of `aoraki.toml`, else `[defaults].remote`, else the
 sole configured remote. **Pin the org, not a local name** — aoraki.toml is
-committed, and remote names are machine-local aliases, so
-`remote = "SarsonDigital"` (or the console URL) resolves on every machine
-that holds a key for that org, whatever the remote is named there. Local
+committed, and remote names are machine-local aliases. Strongest first:
+the org's immutable id (`remote = "org_c9d3ef4agh"` — survives even org
+renames; shown by `aoraki whoami`), the org name
+(`remote = "SarsonDigital"`), or the console URL. All resolve on every
+machine that holds a key for that org, whatever the remote is named there. Local
 names still work; `aoraki whoami` records each remote's org (self-healing
 for configs from before this existed). A stale pin never breaks a deploy —
 the deploy runs and the CLI prints a note that the event wasn't reported.

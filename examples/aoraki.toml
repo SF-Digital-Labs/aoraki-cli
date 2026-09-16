@@ -21,7 +21,8 @@ deploy_script = "k8s/scripts/build-and-deploy.sh"
 url = "https://agent1.manifest.network"
 confirm = true                       # require typing "production" before deploying
 # transport = "gateway"              # customer path: deploy via aoraki-cli-api
-# remote = "SarsonDigital"         # report deploys to a different Aoraki console —
-                                     # pin the ORG (or console URL): portable across
-                                     # machines; local remote names also accepted
+# remote = "org_c9d3ef4agh"        # report deploys to a different Aoraki console.
+                                     # Pin the org id (immutable, from `aoraki whoami`),
+                                     # the org name, or the console URL — all portable;
+                                     # local remote names also accepted
                                      # (default "direct" = internal SSH push, ADR 006)

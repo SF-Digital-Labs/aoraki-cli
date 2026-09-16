@@ -81,6 +81,9 @@ pub struct RemoteConfig {
     /// aoraki.toml files pin the ORG — portable — while local names stay
     /// machine-local aliases.
     pub org: Option<String>,
+    /// The org's immutable public id (org_…): survives org renames, so
+    /// it's the canonical pin for committed configs and CI.
+    pub org_id: Option<String>,
 }
 
 impl GlobalConfig {
@@ -95,8 +98,30 @@ impl GlobalConfig {
             if self.remotes.is_empty() {
                 bail!("no remotes configured — run `aoraki login` (mainnet) or `aoraki login --url <aoraki-api-url>`");
             }
-            // Committed configs pin the ORG or console URL (portable);
-            // local names are just this machine's aliases.
+            // Committed configs pin the ORG — by immutable org_… id, name,
+            // or console URL; local names are just this machine's aliases.
+            if name.starts_with("org_") {
+                let hits: Vec<(&str, &RemoteConfig)> = self
+                    .remotes
+                    .iter()
+                    .filter(|(_, c)| c.org_id.as_deref() == Some(name))
+                    .map(|(k, v)| (k.as_str(), v))
+                    .collect();
+                return match hits[..] {
+                    [only] => Ok(only),
+                    [] => bail!(
+                        "no remote for org {name} on this machine — `aoraki login` with a key for that org \
+                         (or `aoraki whoami` to refresh org ids on older setups)"
+                    ),
+                    _ => bail!(
+                        "org {name} is logged in on several consoles ({}) — pin the local remote name or console URL",
+                        hits.iter()
+                            .map(|(k, v)| format!("{k}: {}", v.api_url))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                };
+            }
             if name.starts_with("http://") || name.starts_with("https://") {
                 let target = name.trim_end_matches('/');
                 let hits: Vec<(&str, &RemoteConfig)> = self
@@ -253,6 +278,7 @@ pub fn write_remote(
     api_url: &str,
     token: Option<&str>,
     org: Option<&str>,
+    org_id: Option<&str>,
 ) -> Result<()> {
     let dir = config_home();
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
@@ -288,6 +314,9 @@ pub fn write_remote(
     }
     if let Some(o) = org {
         entry["org"] = toml_edit::value(o);
+    }
+    if let Some(id) = org_id {
+        entry["org_id"] = toml_edit::value(id);
     }
 
     // First login pins [defaults].remote so later remotes don't make every
