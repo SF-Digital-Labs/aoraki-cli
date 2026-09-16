@@ -60,10 +60,11 @@ Server addresses not in `~/.ssh/config` and a default environment also live in t
 Each console you deploy through is a named *remote* — company cloud, personal cloud, staging console:
 
 ```bash
-aoraki login company  --url https://aoraki.cloud/api/v1
-aoraki login personal --url https://aoraki.example.dev/api/v1
-aoraki whoami                       # who each token maps to (also extends the 90-day window)
-aoraki logout personal              # forget the local token (revoke in the console too if needed)
+aoraki login                        # mainnet console by default — the customer path
+aoraki login testnet --url https://testnet.aoraki.cloud/api/v1
+aoraki whoami                       # remotes + who each key maps to; → marks the default
+aoraki whoami --default testnet     # re-point the default ([defaults].remote)
+aoraki logout testnet               # forget the local token (revoke in the console too if needed)
 ```
 
 ```toml
@@ -88,9 +89,9 @@ sole configured remote.
 
 | Command | Purpose |
 |---|---|
-| `aoraki login [remote] [--url …]` | Connect to an Aoraki console (paste-a-token) |
+| `aoraki login [remote] [--url …]` | Connect to an Aoraki console (paste-a-token; mainnet unless --url) |
 | `aoraki logout [remote]` | Forget the stored token |
-| `aoraki whoami [remote]` | Who each token maps to; probes the API |
+| `aoraki whoami [remote] [--default <r>]` | Remotes + who each key maps to; → the default; `--default` re-points it |
 | `aoraki link` | Set up bare repos + deploy hooks on the boxes (idempotent) |
 | `aoraki deploy [env] [--ref <commit>]` | Push and deploy; production envs require typed confirmation |
 | `aoraki logs [env] [-f] [--since 1h] [--previous]` | App logs from the pods |

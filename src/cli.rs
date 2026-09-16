@@ -17,7 +17,8 @@ pub enum Command {
     Login {
         /// Remote name, e.g. company / personal (default: sole or [defaults].remote)
         remote: Option<String>,
-        /// Aoraki API URL (e.g. https://aoraki.cloud/api/v1) — required for a new remote
+        /// Aoraki API URL — only needed for testnet/other consoles; a new
+        /// remote defaults to mainnet (https://aoraki.cloud/api/v1)
         #[arg(long)]
         url: Option<String>,
         /// Don't open the browser; just prompt for the key
@@ -26,10 +27,13 @@ pub enum Command {
     },
     /// Forget the stored key for a remote (the remote itself is kept)
     Logout { remote: Option<String> },
-    /// Show configured remotes and who each key belongs to
+    /// Who this CLI is: remotes, the account behind each key, → the default
     Whoami {
         /// Check just this remote (default: all)
         remote: Option<String>,
+        /// Make this remote the default for commands (sets [defaults].remote)
+        #[arg(long, value_name = "REMOTE")]
+        default: Option<String>,
     },
     /// Set up bare repos + deploy hooks on each configured server (idempotent)
     Link,

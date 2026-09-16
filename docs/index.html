@@ -103,7 +103,7 @@
   <section>
     <h2>Quick start</h2>
     <pre><span class="c"># 1. Connect to your Aoraki console (opens the tokens page — paste a token)</span>
-<span class="a">aoraki login</span> --url https://aoraki.cloud/api/v1
+<span class="a">aoraki login</span>
 
 <span class="c"># 2. Describe your app once — aoraki.toml at the app root</span>
 <span class="a">aoraki link</span>      <span class="c"># sets up the deploy target (idempotent)</span>
@@ -143,9 +143,9 @@
   <section>
     <h2>Commands</h2>
     <table>
-      <tr><td>aoraki login</td><td>connect this machine to an Aoraki console — supports multiple consoles (company, personal) as named remotes</td></tr>
+      <tr><td>aoraki login</td><td>connect this machine to Aoraki (mainnet by default; --url for other consoles, named as remotes)</td></tr>
       <tr><td>aoraki logout</td><td>forget the stored key for a remote (the remote itself is kept)</td></tr>
-      <tr><td>aoraki whoami</td><td>which account each stored token belongs to</td></tr>
+      <tr><td>aoraki whoami</td><td>remotes and the account behind each key; → marks the default; --default &lt;remote&gt; re-points it</td></tr>
       <tr><td>aoraki link</td><td>set up bare repos + deploy hooks on each configured server (idempotent)</td></tr>
       <tr><td>aoraki connect github</td><td>connect an external provider (one-time) so repo-based deploys can build your code</td></tr>
       <tr><td>aoraki deploy [env]</td><td>push and deploy; production environments require typed confirmation</td></tr>

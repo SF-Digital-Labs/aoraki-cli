@@ -249,6 +249,35 @@ pub fn write_remote(name: &str, api_url: &str, token: Option<&str>) -> Result<()
     Ok(())
 }
 
+/// Set [defaults].remote in config.toml (toml_edit keeps comments intact).
+pub fn write_default_remote(name: &str) -> Result<()> {
+    let dir = config_home();
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let path = dir.join("config.toml");
+    let text = if path.exists() {
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?
+    } else {
+        String::new()
+    };
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    let defaults = doc
+        .entry("defaults")
+        .or_insert(toml_edit::table())
+        .as_table_mut()
+        .context("[defaults] in config.toml is not a table")?;
+    defaults["remote"] = toml_edit::value(name);
+    std::fs::write(&path, doc.to_string())
+        .with_context(|| format!("writing {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
 pub fn load_global() -> Result<GlobalConfig> {
     let path = config_home().join("config.toml");
     if !path.exists() {

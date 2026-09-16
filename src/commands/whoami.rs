@@ -1,17 +1,38 @@
-//! `aoraki whoami [remote]` — which account each stored key maps to.
+//! `aoraki whoami [remote] [--default <remote>]` — the one view of "who is
+//! this CLI": every remote, the account behind its key, and → marking the
+//! default (the console commands use when an environment doesn't pin one).
 //! Also a liveness probe: a passing check counts as usage and extends the
-//! key's 90-day idle window.
+//! key's 90-day idle window. `--default` re-points [defaults].remote.
 
 use crate::{aoraki, config};
-use anyhow::Result;
+use anyhow::{bail, Result};
 
-pub fn run(remote: Option<String>) -> Result<()> {
-    let global = config::load_global()?;
+pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
+    let mut global = config::load_global()?;
     if global.remotes.is_empty() {
-        println!("no remotes configured — run `aoraki login --url <aoraki-api-url>`");
+        println!("no remotes configured — run `aoraki login`");
         return Ok(());
     }
 
+    if let Some(name) = &set_default {
+        if !global.remotes.contains_key(name) {
+            bail!(
+                "unknown remote '{}' (configured: {})",
+                name,
+                global
+                    .remotes
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        config::write_default_remote(name)?;
+        global.defaults.remote = Some(name.clone());
+        println!("✓ default remote is now '{name}'");
+    }
+
+    let default = global.defaults.remote.as_deref();
     let selected: Vec<(&str, &config::RemoteConfig)> = match &remote {
         Some(name) => vec![global.resolve_remote(Some(name))?],
         None => global.remotes.iter().map(|(k, v)| (k.as_str(), v)).collect(),
@@ -19,13 +40,14 @@ pub fn run(remote: Option<String>) -> Result<()> {
 
     let mut failed = false;
     for (name, cfg) in selected {
+        let marker = if Some(name) == default { "→" } else { " " };
         match &cfg.token {
-            None => println!("{name}: {} — not logged in", cfg.api_url),
+            None => println!("{marker} {name}: {} — not logged in", cfg.api_url),
             Some(token) => match aoraki::whoami(&cfg.api_url, token) {
                 Ok(id) => {
                     let expires = id.expires_at.split('T').next().unwrap_or_default();
                     println!(
-                        "{name}: {} — {} (org: {}, key: {}, extended to {})",
+                        "{marker} {name}: {} — {} (org: {}, key: {}, extended to {})",
                         cfg.api_url,
                         id.user.as_deref().unwrap_or("you"),
                         id.org,
@@ -34,14 +56,17 @@ pub fn run(remote: Option<String>) -> Result<()> {
                     );
                 }
                 Err(err) => {
-                    println!("{name}: {} — ✗ {err}", cfg.api_url);
+                    println!("{marker} {name}: {} — ✗ {err}", cfg.api_url);
                     failed = true;
                 }
             },
         }
     }
+    if remote.is_none() && default.is_none() && global.remotes.len() > 1 {
+        println!("\nno default set — `aoraki whoami --default <remote>` to pick one");
+    }
     if failed {
-        anyhow::bail!("some remotes failed — log in again where needed");
+        bail!("some remotes failed — log in again where needed");
     }
     Ok(())
 }

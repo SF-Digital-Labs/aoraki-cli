@@ -26,7 +26,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             no_browser,
         } => login::run(remote, url, no_browser),
         Command::Logout { remote } => logout::run(remote),
-        Command::Whoami { remote } => whoami::run(remote),
+        Command::Whoami { remote, default } => whoami::run(remote, default),
         Command::Link => link::run(),
         Command::Connect { provider } => connect::run(provider),
         Command::Deploy { env, git_ref } => deploy::run(env, git_ref),
