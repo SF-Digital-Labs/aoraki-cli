@@ -33,7 +33,7 @@ pub fn run() -> Result<()> {
 
         // Deploy-log dir is best-effort here; the hook falls back to the bare
         // repo dir if /data/logs isn't writable.
-        let _ = ssh.run(&format!("mkdir -p /data/logs/aoraki-deploys 2>/dev/null || true"));
+        let _ = ssh.run("mkdir -p /data/logs/aoraki-deploys 2>/dev/null || true");
 
         ssh.run_with_stdin(
             &format!(

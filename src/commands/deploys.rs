@@ -17,7 +17,7 @@ pub fn run(env: Option<String>, limit: usize) -> Result<()> {
             println!("No gateway deploys recorded for {} yet.", ctx.app());
             return Ok(());
         }
-        println!("{:<22} {:<10} {:<9} {}", "TIME", "STATUS", "SHA", "DURATION");
+        println!("TIME                   STATUS     SHA       DURATION");
         for rec in rows {
             let sha = rec["commit_sha"].as_str().unwrap_or("?");
             println!(
@@ -50,7 +50,7 @@ pub fn run(env: Option<String>, limit: usize) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<22} {:<10} {:<9} {}", "TIME", "STATUS", "SHA", "DURATION");
+    println!("TIME                   STATUS     SHA       DURATION");
     let mut shown = 0;
     for line in raw.lines().rev() {
         let Ok(rec) = serde_json::from_str::<serde_json::Value>(line) else {

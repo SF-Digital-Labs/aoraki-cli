@@ -10,6 +10,9 @@ use std::process::{Command, Stdio};
 /// command pays the handshake, everything after multiplexes over the socket.
 pub struct Ssh {
     target: String,
+    /// Multiplexing socket path — only used on unix (Windows OpenSSH has
+    /// no ControlMaster support; there every command dials fresh).
+    #[cfg_attr(windows, allow(dead_code))]
     control_path: String,
 }
 
@@ -33,20 +36,29 @@ impl Ssh {
     }
 
     fn option_args(&self) -> Vec<String> {
-        vec![
+        let mut args: Vec<String> = Vec::new();
+        // ControlMaster multiplexing: the first command pays the handshake,
+        // the rest ride the socket. Windows OpenSSH doesn't implement the
+        // Control* options, so there each command dials fresh — slower but
+        // correct.
+        #[cfg(unix)]
+        args.extend([
             "-o".into(),
             "ControlMaster=auto".into(),
             "-o".into(),
             format!("ControlPath={}", self.control_path),
             "-o".into(),
             "ControlPersist=10m".into(),
+        ]);
+        args.extend([
             "-o".into(),
             "ServerAliveInterval=30".into(),
             // Firewalls that drop (not reject) port 22 otherwise leave ssh
             // waiting on the OS TCP timeout — the CLI looks frozen.
             "-o".into(),
             "ConnectTimeout=10".into(),
-        ]
+        ]);
+        args
     }
 
     /// Turn a finished ssh invocation into a Result. ssh reserves exit 255
