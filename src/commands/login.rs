@@ -104,7 +104,7 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
         }
     };
 
-    config::write_remote(&name, &api_url, Some(token))?;
+    config::write_remote(&name, &api_url, Some(token), Some(&identity.org))?;
     let expires = identity.expires_at.split('T').next().unwrap_or_default();
     println!(
         "✓ logged in to '{}' as {} (org: {}, key: {})",

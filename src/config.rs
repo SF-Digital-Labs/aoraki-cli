@@ -77,6 +77,10 @@ pub struct RemoteConfig {
     pub api_url: String,
     /// Absent until `aoraki login` pastes one in (or after `aoraki logout`).
     pub token: Option<String>,
+    /// Org behind the key (recorded by login/whoami). Lets committed
+    /// aoraki.toml files pin the ORG — portable — while local names stay
+    /// machine-local aliases.
+    pub org: Option<String>,
 }
 
 impl GlobalConfig {
@@ -85,12 +89,56 @@ impl GlobalConfig {
     pub fn resolve_remote(&self, name: Option<&str>) -> Result<(&str, &RemoteConfig)> {
         let available = || self.remotes.keys().cloned().collect::<Vec<_>>().join(", ");
         if let Some(name) = name {
-            return match self.remotes.get_key_value(name) {
-                Some((k, v)) => Ok((k, v)),
-                None if self.remotes.is_empty() => bail!(
-                    "no remotes configured — run `aoraki login {name} --url <aoraki-api-url>`"
+            if let Some((k, v)) = self.remotes.get_key_value(name) {
+                return Ok((k, v));
+            }
+            if self.remotes.is_empty() {
+                bail!("no remotes configured — run `aoraki login` (mainnet) or `aoraki login --url <aoraki-api-url>`");
+            }
+            // Committed configs pin the ORG or console URL (portable);
+            // local names are just this machine's aliases.
+            if name.starts_with("http://") || name.starts_with("https://") {
+                let target = name.trim_end_matches('/');
+                let hits: Vec<(&str, &RemoteConfig)> = self
+                    .remotes
+                    .iter()
+                    .filter(|(_, c)| c.api_url.trim_end_matches('/') == target)
+                    .map(|(k, v)| (k.as_str(), v))
+                    .collect();
+                return match hits[..] {
+                    [only] => Ok(only),
+                    [] => bail!(
+                        "no remote for {target} on this machine — run `aoraki login --url {target}`"
+                    ),
+                    _ => bail!(
+                        "several orgs are logged in at {target} ({}) — pin the org or a local remote name",
+                        hits.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(", ")
+                    ),
+                };
+            }
+            let want = normalize(name);
+            let hits: Vec<(&str, &RemoteConfig)> = self
+                .remotes
+                .iter()
+                .filter(|(_, c)| c.org.as_deref().is_some_and(|o| normalize(o) == want))
+                .map(|(k, v)| (k.as_str(), v))
+                .collect();
+            return match hits[..] {
+                [only] => Ok(only),
+                [] => bail!(
+                    "'{}' matches no remote name or org on this machine (configured: {}) — \
+                     `aoraki whoami` shows orgs; `aoraki login` adds one",
+                    name,
+                    available()
                 ),
-                None => bail!("unknown remote '{}' (configured: {})", name, available()),
+                _ => bail!(
+                    "org '{}' is logged in on several consoles ({}) — pin the local remote name or the console URL",
+                    name,
+                    hits.iter()
+                        .map(|(k, v)| format!("{k}: {}", v.api_url))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             };
         }
         if let Some(def) = &self.defaults.remote {
@@ -150,6 +198,15 @@ pub struct Defaults {
     pub remote: Option<String>,
 }
 
+/// Case/punctuation-insensitive comparison key: "Sarson Funds" ==
+/// "sarson-funds" == "sarsonfunds".
+fn normalize(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
 pub fn config_home() -> PathBuf {
     if let Ok(dir) = std::env::var("MANIFEST_CONFIG_HOME") {
         if !dir.is_empty() {
@@ -191,7 +248,12 @@ pub fn find_repo_config() -> Result<(PathBuf, RepoConfig)> {
 /// Write (or clear, with token=None) a remote in config.toml, creating the
 /// file if needed. toml_edit keeps hand-written sections and comments
 /// intact. The file ends up 0600 — it holds credentials.
-pub fn write_remote(name: &str, api_url: &str, token: Option<&str>) -> Result<()> {
+pub fn write_remote(
+    name: &str,
+    api_url: &str,
+    token: Option<&str>,
+    org: Option<&str>,
+) -> Result<()> {
     let dir = config_home();
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let path = dir.join("config.toml");
@@ -223,6 +285,9 @@ pub fn write_remote(name: &str, api_url: &str, token: Option<&str>) -> Result<()
         None => {
             entry.remove("token");
         }
+    }
+    if let Some(o) = org {
+        entry["org"] = toml_edit::value(o);
     }
 
     // First login pins [defaults].remote so later remotes don't make every

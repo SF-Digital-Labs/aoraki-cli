@@ -13,7 +13,7 @@ pub fn run(remote: Option<String>) -> Result<()> {
         return Ok(());
     }
     let (name, api_url) = (name.to_string(), cfg.api_url.clone());
-    config::write_remote(&name, &api_url, None)?;
+    config::write_remote(&name, &api_url, None, None)?;
     println!("✓ logged out of '{name}' — token removed from config.toml");
     println!("  (revoke it in the console too if this machine is no longer trusted)");
     Ok(())

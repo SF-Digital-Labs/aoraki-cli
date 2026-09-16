@@ -39,6 +39,9 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
     };
 
     let mut failed = false;
+    // Self-healing: record each remote's org so committed aoraki.toml
+    // files can pin the org instead of a machine-local name.
+    let mut org_updates: Vec<(String, String, String, String)> = Vec::new();
     for (name, cfg) in selected {
         let marker = if Some(name) == default { "→" } else { " " };
         match &cfg.token {
@@ -54,6 +57,14 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
                         id.token_name,
                         expires,
                     );
+                    if cfg.org.as_deref() != Some(id.org.as_str()) {
+                        org_updates.push((
+                            name.to_string(),
+                            cfg.api_url.clone(),
+                            token.clone(),
+                            id.org.clone(),
+                        ));
+                    }
                 }
                 Err(err) => {
                     println!("{marker} {name}: {} — ✗ {err}", cfg.api_url);
@@ -61,6 +72,9 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
                 }
             },
         }
+    }
+    for (name, api_url, token, org) in org_updates {
+        let _ = config::write_remote(&name, &api_url, Some(&token), Some(&org));
     }
     if remote.is_none() && default.is_none() && global.remotes.len() > 1 {
         println!("\nno default set — `aoraki whoami --default <remote>` to pick one");
