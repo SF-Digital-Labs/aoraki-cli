@@ -496,3 +496,365 @@ pub fn resolve_target(global: &GlobalConfig, server: &str) -> String {
         None => server.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn repo(toml: &str) -> RepoConfig {
+        toml::from_str(toml).expect("valid repo config")
+    }
+    fn global(toml: &str) -> GlobalConfig {
+        toml::from_str(toml).expect("valid global config")
+    }
+    const MINIMAL_ENV: &str = r#"
+        [app]
+        name = "demo"
+        [environments.production]
+        server = "core2"
+        branch = "prod"
+        namespace = "demo"
+        deploy_script = "k8s/deploy.sh"
+    "#;
+    const TWO_ENVS: &str = r#"
+        [app]
+        name = "demo"
+        [environments.staging]
+        server = "lab"
+        branch = "qa"
+        namespace = "demo-stg"
+        deploy_script = "k8s/deploy.sh"
+        aliases = ["testnet", "stg"]
+        [environments.production]
+        server = "core2"
+        branch = "prod"
+        namespace = "demo"
+        deploy_script = "k8s/deploy.sh"
+    "#;
+
+    // ── RepoConfig parsing ────────────────────────────────────────────
+
+    #[test]
+    fn minimal_repo_config_parses_with_defaults() {
+        let cfg = repo(MINIMAL_ENV);
+        let env = &cfg.environments["production"];
+        assert_eq!(cfg.app.name, "demo");
+        assert!(!env.confirm, "confirm defaults to false");
+        assert!(env.aliases.is_empty(), "aliases default to empty");
+        assert!(env.workdir.is_none());
+        assert!(!env.is_gateway(), "no transport = direct");
+    }
+
+    #[test]
+    fn unknown_field_in_env_is_rejected() {
+        let bad = MINIMAL_ENV.replace("namespace", "namspace");
+        assert!(toml::from_str::<RepoConfig>(&bad).is_err());
+    }
+
+    #[test]
+    fn unknown_field_in_app_is_rejected() {
+        let bad = format!("{MINIMAL_ENV}\n[app.extra]\nx = 1\n");
+        assert!(toml::from_str::<RepoConfig>(&bad).is_err());
+    }
+
+    #[test]
+    fn missing_app_name_is_rejected() {
+        let bad = MINIMAL_ENV.replace("name = \"demo\"", "");
+        assert!(toml::from_str::<RepoConfig>(&bad).is_err());
+    }
+
+    #[test]
+    fn gateway_transport_is_detected() {
+        let cfg = repo(&MINIMAL_ENV.replace(
+            "deploy_script = \"k8s/deploy.sh\"",
+            "deploy_script = \"k8s/deploy.sh\"\ntransport = \"gateway\"",
+        ));
+        assert!(cfg.environments["production"].is_gateway());
+    }
+
+    #[test]
+    fn explicit_direct_transport_is_not_gateway() {
+        let cfg = repo(&MINIMAL_ENV.replace(
+            "deploy_script = \"k8s/deploy.sh\"",
+            "deploy_script = \"k8s/deploy.sh\"\ntransport = \"direct\"",
+        ));
+        assert!(!cfg.environments["production"].is_gateway());
+    }
+
+    // ── resolve_env_name ──────────────────────────────────────────────
+
+    fn resolve(arg: Option<&str>, branch: Option<&str>, toml_src: &str) -> Result<String> {
+        resolve_env_name(
+            arg.map(String::from),
+            branch,
+            &repo(toml_src),
+            &GlobalConfig::default(),
+        )
+    }
+
+    #[test]
+    fn exact_env_name_wins() {
+        assert_eq!(resolve(Some("staging"), None, TWO_ENVS).unwrap(), "staging");
+    }
+
+    #[test]
+    fn declared_alias_resolves() {
+        assert_eq!(resolve(Some("testnet"), None, TWO_ENVS).unwrap(), "staging");
+        assert_eq!(resolve(Some("stg"), None, TWO_ENVS).unwrap(), "staging");
+    }
+
+    #[test]
+    fn unique_prefix_resolves() {
+        assert_eq!(resolve(Some("prod"), None, TWO_ENVS).unwrap(), "production");
+        assert_eq!(resolve(Some("st"), None, TWO_ENVS).unwrap(), "staging");
+    }
+
+    #[test]
+    fn ambiguous_prefix_errors() {
+        let src = TWO_ENVS.replace("environments.production", "environments.stable");
+        let err = resolve(Some("st"), None, &src).err().unwrap().to_string();
+        assert!(err.contains("not in aoraki.toml"), "got: {err}");
+    }
+
+    #[test]
+    fn unknown_env_error_lists_available() {
+        let err = resolve(Some("nope"), None, TWO_ENVS).err().unwrap().to_string();
+        assert!(err.contains("staging") && err.contains("production"), "got: {err}");
+    }
+
+    #[test]
+    fn explicit_arg_beats_checked_out_branch() {
+        assert_eq!(
+            resolve(Some("staging"), Some("prod"), TWO_ENVS).unwrap(),
+            "staging"
+        );
+    }
+
+    #[test]
+    fn checked_out_branch_picks_its_environment() {
+        assert_eq!(resolve(None, Some("qa"), TWO_ENVS).unwrap(), "staging");
+        assert_eq!(resolve(None, Some("prod"), TWO_ENVS).unwrap(), "production");
+    }
+
+    #[test]
+    fn unknown_branch_with_two_envs_errors() {
+        let err = resolve(None, Some("feature-x"), TWO_ENVS).err().unwrap().to_string();
+        assert!(err.contains("specify an environment"), "got: {err}");
+    }
+
+    #[test]
+    fn shared_branch_is_ambiguous_and_falls_through() {
+        let src = TWO_ENVS.replace("branch = \"prod\"", "branch = \"qa\"");
+        // both envs deploy qa → branch can't decide; no defaults → error
+        assert!(resolve(None, Some("qa"), &src).is_err());
+    }
+
+    #[test]
+    fn app_default_env_breaks_the_tie() {
+        let src = TWO_ENVS.replace("name = \"demo\"", "name = \"demo\"\ndefault_env = \"staging\"");
+        assert_eq!(resolve(None, None, &src).unwrap(), "staging");
+    }
+
+    #[test]
+    fn invalid_app_default_env_errors() {
+        let src = TWO_ENVS.replace("name = \"demo\"", "name = \"demo\"\ndefault_env = \"nope\"");
+        let err = resolve(None, None, &src).err().unwrap().to_string();
+        assert!(err.contains("default_env"), "got: {err}");
+    }
+
+    #[test]
+    fn global_default_environment_is_honored() {
+        let g = global("[defaults]\nenvironment = \"staging\"\n");
+        let name = resolve_env_name(None, None, &repo(TWO_ENVS), &g).unwrap();
+        assert_eq!(name, "staging");
+    }
+
+    #[test]
+    fn sole_environment_needs_no_selection() {
+        assert_eq!(resolve(None, None, MINIMAL_ENV).unwrap(), "production");
+    }
+
+    // ── resolve_remote ────────────────────────────────────────────────
+
+    const REMOTES: &str = r#"
+        [remotes.company]
+        api_url = "https://aoraki.cloud/api/v1"
+        org = "Manifest"
+        org_id = "org_aaaaaaaaaa"
+        [remotes.personal]
+        api_url = "https://testnet.aoraki.cloud/api/v1"
+        org = "Sarson Funds"
+        org_id = "org_bbbbbbbbbb"
+    "#;
+
+    #[test]
+    fn explicit_local_name_resolves() {
+        let g = global(REMOTES);
+        assert_eq!(g.resolve_remote(Some("company")).unwrap().0, "company");
+    }
+
+    #[test]
+    fn org_id_pin_resolves() {
+        let g = global(REMOTES);
+        assert_eq!(g.resolve_remote(Some("org_bbbbbbbbbb")).unwrap().0, "personal");
+    }
+
+    #[test]
+    fn unknown_org_id_errors_with_login_hint() {
+        let g = global(REMOTES);
+        let err = g.resolve_remote(Some("org_zzzzzzzzzz")).err().unwrap().to_string();
+        assert!(err.contains("aoraki login"), "got: {err}");
+    }
+
+    #[test]
+    fn org_id_on_multiple_consoles_is_ambiguous() {
+        let src = REMOTES.replace("org_bbbbbbbbbb", "org_aaaaaaaaaa");
+        let err = global(&src)
+            .resolve_remote(Some("org_aaaaaaaaaa"))
+            .err().unwrap()
+            .to_string();
+        assert!(err.contains("several consoles"), "got: {err}");
+    }
+
+    #[test]
+    fn console_url_pin_resolves_ignoring_trailing_slash() {
+        let g = global(REMOTES);
+        let (name, _) = g
+            .resolve_remote(Some("https://testnet.aoraki.cloud/api/v1/"))
+            .unwrap();
+        assert_eq!(name, "personal");
+    }
+
+    #[test]
+    fn unknown_console_url_errors_with_login_hint() {
+        let g = global(REMOTES);
+        let err = g
+            .resolve_remote(Some("https://other.example/api/v1"))
+            .err().unwrap()
+            .to_string();
+        assert!(err.contains("aoraki login --url"), "got: {err}");
+    }
+
+    #[test]
+    fn url_with_multiple_orgs_is_ambiguous() {
+        let src = REMOTES.replace(
+            "https://testnet.aoraki.cloud/api/v1",
+            "https://aoraki.cloud/api/v1",
+        );
+        let err = global(&src)
+            .resolve_remote(Some("https://aoraki.cloud/api/v1"))
+            .err().unwrap()
+            .to_string();
+        assert!(err.contains("several orgs"), "got: {err}");
+    }
+
+    #[test]
+    fn org_name_matches_case_and_punctuation_insensitively() {
+        let g = global(REMOTES);
+        assert_eq!(g.resolve_remote(Some("sarson-funds")).unwrap().0, "personal");
+        assert_eq!(g.resolve_remote(Some("SARSONFUNDS")).unwrap().0, "personal");
+    }
+
+    #[test]
+    fn unmatched_name_lists_configured_remotes() {
+        let g = global(REMOTES);
+        let err = g.resolve_remote(Some("nope")).err().unwrap().to_string();
+        assert!(err.contains("company") && err.contains("personal"), "got: {err}");
+    }
+
+    #[test]
+    fn defaults_remote_is_used_when_unnamed() {
+        let src = format!("{REMOTES}\n[defaults]\nremote = \"personal\"\n");
+        assert_eq!(global(&src).resolve_remote(None).unwrap().0, "personal");
+    }
+
+    #[test]
+    fn dangling_defaults_remote_errors() {
+        let src = format!("{REMOTES}\n[defaults]\nremote = \"ghost\"\n");
+        let err = global(&src).resolve_remote(None).err().unwrap().to_string();
+        assert!(err.contains("ghost"), "got: {err}");
+    }
+
+    #[test]
+    fn sole_remote_needs_no_selection() {
+        let g = global(
+            "[remotes.only]\napi_url = \"https://aoraki.cloud/api/v1\"\n",
+        );
+        assert_eq!(g.resolve_remote(None).unwrap().0, "only");
+    }
+
+    #[test]
+    fn zero_remotes_errors_with_login_hint() {
+        let err = GlobalConfig::default().resolve_remote(None).err().unwrap().to_string();
+        assert!(err.contains("aoraki login"), "got: {err}");
+    }
+
+    #[test]
+    fn multiple_remotes_without_default_must_be_named() {
+        let err = global(REMOTES).resolve_remote(None).err().unwrap().to_string();
+        assert!(err.contains("[defaults].remote"), "got: {err}");
+    }
+
+    // ── resolve_target ────────────────────────────────────────────────
+
+    #[test]
+    fn servers_entry_with_user_builds_user_at_host() {
+        let g = global("[servers.core2]\nhost = \"1.2.3.4\"\nuser = \"deploy\"\n");
+        assert_eq!(resolve_target(&g, "core2"), "deploy@1.2.3.4");
+    }
+
+    #[test]
+    fn servers_entry_without_user_is_bare_host() {
+        let g = global("[servers.core2]\nhost = \"1.2.3.4\"\n");
+        assert_eq!(resolve_target(&g, "core2"), "1.2.3.4");
+    }
+
+    #[test]
+    fn unlisted_alias_passes_through_to_ssh_config() {
+        assert_eq!(resolve_target(&GlobalConfig::default(), "deploymfx"), "deploymfx");
+    }
+
+    // ── find_repo_config (cwd-sensitive: serialized) ──────────────────
+
+    static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn in_dir<T>(dir: &std::path::Path, f: impl FnOnce() -> T) -> T {
+        let _guard = CWD_LOCK.lock().unwrap();
+        let orig = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir).unwrap();
+        let out = f();
+        std::env::set_current_dir(orig).unwrap();
+        out
+    }
+
+    #[test]
+    fn aoraki_toml_is_preferred_over_legacy_manifest_toml() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("manifest.toml"), MINIMAL_ENV.replace("demo", "old")).unwrap();
+        std::fs::write(tmp.path().join("aoraki.toml"), MINIMAL_ENV).unwrap();
+        let cfg = in_dir(tmp.path(), || find_repo_config().unwrap().1);
+        assert_eq!(cfg.app.name, "demo");
+    }
+
+    #[test]
+    fn config_is_found_by_walking_up_from_a_subdir() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("aoraki.toml"), MINIMAL_ENV).unwrap();
+        let sub = tmp.path().join("a/b");
+        std::fs::create_dir_all(&sub).unwrap();
+        let (root, cfg) = in_dir(&sub, || find_repo_config().unwrap());
+        assert_eq!(cfg.app.name, "demo");
+        assert_eq!(
+            root.canonicalize().unwrap(),
+            tmp.path().canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn config_with_no_environments_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("aoraki.toml"), "[app]\nname = \"demo\"\n[environments]\n").unwrap();
+        let err = in_dir(tmp.path(), || find_repo_config().err().unwrap().to_string());
+        assert!(err.contains("no [environments"), "got: {err}");
+    }
+}

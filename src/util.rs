@@ -21,3 +21,20 @@ pub fn git_capture(dir: &Path, args: &[&str]) -> Result<String> {
 pub fn sh_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sh_quote_wraps_plain_strings() {
+        assert_eq!(sh_quote("hello"), "'hello'");
+        assert_eq!(sh_quote("a b/c.d"), "'a b/c.d'");
+    }
+
+    #[test]
+    fn sh_quote_escapes_embedded_single_quotes() {
+        assert_eq!(sh_quote("it's"), r"'it'\''s'");
+        assert_eq!(sh_quote("''"), r"''\'''\'''");
+    }
+}

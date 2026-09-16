@@ -95,3 +95,39 @@ exit $DEPLOY_STATUS
 pub fn script() -> String {
     HOOK_TEMPLATE.replace("__VERSION__", &HOOK_VERSION.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn script_embeds_the_current_hook_version() {
+        let s = script();
+        assert!(s.contains(&format!("aoraki-hook-version: {HOOK_VERSION}")));
+        assert!(!s.contains("__VERSION__"), "placeholder must be substituted");
+    }
+
+    #[test]
+    fn script_only_deploys_the_configured_branch_ref() {
+        let s = script();
+        assert!(s.contains(r#"if [ "$REF" != "refs/heads/$BRANCH" ]"#));
+    }
+
+    #[test]
+    fn script_reads_its_config_and_fails_loudly_when_unlinked() {
+        let s = script();
+        for key in ["app", "branch", "workdir", "deployscript"] {
+            assert!(s.contains(&format!("$(cfg {key})")), "missing cfg {key}");
+        }
+        assert!(s.contains("re-run 'aoraki link'"));
+    }
+
+    #[test]
+    fn script_records_deploy_lifecycle_events() {
+        let s = script();
+        assert!(s.contains("record started"));
+        assert!(s.contains("record failed"));
+        // detached checkout of the exact pushed SHA
+        assert!(s.contains("checkout -q -f"));
+    }
+}
