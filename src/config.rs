@@ -44,6 +44,15 @@ pub struct EnvConfig {
     /// Which Aoraki remote gets this environment's deploy events
     /// (default: [defaults].remote in the global config, or the sole remote).
     pub remote: Option<String>,
+    /// Gateway release deploys: container port. Present = the gateway
+    /// builds, pushes to the platform registry, and leases via the console.
+    pub port: Option<u16>,
+    /// Chain SKU for the lease (console default when absent).
+    pub size: Option<String>,
+    /// Dockerfile path relative to the repo root (monorepos).
+    pub dockerfile: Option<String>,
+    /// Lease service name (default "web").
+    pub process_type: Option<String>,
     /// Extra names this environment answers to (e.g. staging: ["qa", "stg"]).
     /// Unique prefixes of the real name (prod → production) work without this.
     #[serde(default)]

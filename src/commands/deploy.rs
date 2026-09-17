@@ -165,8 +165,9 @@ fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
 
     // Build-contract preflight (platform § 5): a Dockerfile is the one build
     // input the customer owns. The gateway re-checks at the exact commit.
-    if !ctx.repo_root.join("Dockerfile").exists() {
-        bail!("no Dockerfile at the repo root — add one (or run `aoraki init` once it exists)");
+    let dockerfile = ctx.env().dockerfile.as_deref().unwrap_or("Dockerfile");
+    if !ctx.repo_root.join(dockerfile).exists() {
+        bail!("no {dockerfile} at the repo root — add one (or run `aoraki init` once it exists)");
     }
 
     // Only pushed commits deploy. This is a local heads-up; the gateway is
@@ -191,15 +192,26 @@ fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
         short
     );
 
-    let resp = gw.post(
-        "/deploys",
-        serde_json::json!({
-            "repo": repo,
-            "git_ref": sha,
-            "app": ctx.app(),
-            "environment": ctx.env_name,
-        }),
-    )?;
+    let mut body = serde_json::json!({
+        "repo": repo,
+        "git_ref": sha,
+        "app": ctx.app(),
+        "environment": ctx.env_name,
+    });
+    // Release deploys: port makes the gateway build → push → lease.
+    if let Some(port) = ctx.env().port {
+        body["port"] = serde_json::json!(port);
+        if let Some(size) = &ctx.env().size {
+            body["size"] = serde_json::json!(size);
+        }
+        if let Some(df) = &ctx.env().dockerfile {
+            body["dockerfile"] = serde_json::json!(df);
+        }
+        if let Some(pt) = &ctx.env().process_type {
+            body["process_type"] = serde_json::json!(pt);
+        }
+    }
+    let resp = gw.post("/deploys", body)?;
     let deploy_id = resp["data"]["deploy_id"]
         .as_str()
         .context("gateway did not return a deploy id")?
