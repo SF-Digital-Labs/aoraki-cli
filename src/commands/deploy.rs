@@ -36,6 +36,9 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
         }
     }
 
+    if ctx.env().is_cloud() {
+        return cloud_deploy(&ctx, &short);
+    }
     if ctx.env().is_gateway() {
         return gateway_deploy(&ctx, &sha, &short);
     }
@@ -153,8 +156,146 @@ fn sha_on_env_branch(ctx: &Ctx, sha: &str) -> bool {
     false
 }
 
-/// Customer path (ADR 008): the gateway pulls the pushed commit from the
-/// customer's GitHub and deploys it — no SSH, no direct push from here.
+/// "cloud" transport: the customer path in three moves, all visible —
+/// build the Dockerfile LOCALLY, push to the platform registry, then
+/// lease via the console (create, or blue-green image update when the
+/// deployment already exists). Env on first create comes from an
+/// optional uncommitted `.aoraki.env`; ongoing env lives in the
+/// console's env groups (applied on every redeploy).
+fn cloud_deploy(ctx: &Ctx, short: &str) -> Result<()> {
+    let env_cfg = ctx.env();
+    let port = env_cfg
+        .port
+        .context("cloud transport needs `port = <container port>` in this environment")?;
+    let dockerfile = env_cfg.dockerfile.as_deref().unwrap_or("Dockerfile");
+    if !ctx.repo_root.join(dockerfile).exists() {
+        bail!("no {dockerfile} in the repo — cloud deploys build it locally");
+    }
+    let size = env_cfg.size.as_deref().unwrap_or("docker-xlarge-storage");
+    let process_type = env_cfg.process_type.as_deref().unwrap_or("web");
+    let name = ctx.app().to_string();
+
+    let console = crate::console::Console::connect(env_cfg.remote.as_deref())?;
+    let registry =
+        std::env::var("AORAKI_REGISTRY").unwrap_or_else(|_| "registry.aoraki.cloud".to_string());
+    let image = format!("{registry}/{}/{name}:{short}", console.org_hex);
+
+    if git_capture(&ctx.repo_root, &["status", "--porcelain"])
+        .map(|o| !o.trim().is_empty())
+        .unwrap_or(false)
+    {
+        println!("⚠ working tree has uncommitted changes — the image is built from the tree, tagged {short}");
+    }
+
+    println!(
+        "→ building {name} {short} from {dockerfile} → {image} (org: {}, remote: {})",
+        console.org_name, console.remote_name
+    );
+    let status = Command::new("docker")
+        .current_dir(&ctx.repo_root)
+        .args([
+            "build", "-f", dockerfile, "-t", &image,
+            "--build-arg", &format!("BUILD_HASH={short}"), ".",
+        ])
+        .status()
+        .context("failed to run docker build — is docker installed and running?")?;
+    if !status.success() {
+        bail!("docker build failed");
+    }
+
+    println!("→ pushing {image}");
+    let status = Command::new("docker")
+        .args(["push", &image])
+        .status()
+        .context("failed to run docker push")?;
+    if !status.success() {
+        bail!("docker push failed — logged in? try: docker login {registry}");
+    }
+
+    // Upsert: an existing live deployment gets a blue-green image update;
+    // otherwise create (with first-boot env from .aoraki.env if present).
+    let existing = console.get(&format!("/orgs/{}/deployments", console.org_hex))?;
+    let existing_hex = existing["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|d| {
+            d["name"].as_str() == Some(name.as_str())
+                && d["status"].as_str() != Some("closed")
+                && d["status"].as_str() != Some("failed")
+        })
+        .and_then(|d| d["id"].as_str().or_else(|| d["hex_id"].as_str()))
+        .map(String::from);
+
+    let dep_hex = match existing_hex {
+        Some(hex) => {
+            println!("→ updating deployment {hex} (blue-green image swap; env from console groups)");
+            console.post(
+                &format!("/orgs/{}/deployments/{hex}/redeploy", console.org_hex),
+                &serde_json::json!({ "image": image }),
+            )?;
+            hex
+        }
+        None => {
+            let env_map = read_dotenv(&ctx.repo_root.join(".aoraki.env"))?;
+            if !env_map.is_empty() {
+                println!(
+                    "→ first deploy: {} env var(s) from .aoraki.env (manage ongoing env in the console)",
+                    env_map.len()
+                );
+            }
+            let created = console.post(
+                &format!("/orgs/{}/deploys", console.org_hex),
+                &serde_json::json!({
+                    "name": name,
+                    "image": image,
+                    "port": port,
+                    "env": env_map,
+                    "size": size,
+                    "process_type": process_type,
+                }),
+            )?;
+            let hex = created["data"]["hex_id"]
+                .as_str()
+                .or_else(|| created["data"]["id"].as_str())
+                .context("deploy accepted but no deployment id returned")?
+                .to_string();
+            println!("deployment {hex} registered — waiting for the lease…");
+            hex
+        }
+    };
+
+    crate::commands::launch::wait_for_lease_banner(&console, &dep_hex)?;
+    Ok(())
+}
+
+/// KEY=VALUE lines, # comments; missing file → empty map. Never committed
+/// (add .aoraki.env to .gitignore) — it exists for the FIRST cloud deploy;
+/// console env groups own ongoing configuration.
+fn read_dotenv(path: &std::path::Path) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let mut map = serde_json::Map::new();
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Ok(map);
+    };
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (k, v) = line
+            .split_once('=')
+            .with_context(|| format!(".aoraki.env: '{line}' is not KEY=VALUE"))?;
+        map.insert(
+            k.trim().to_string(),
+            serde_json::Value::String(v.trim().to_string()),
+        );
+    }
+    Ok(map)
+}
+
+/// "gateway" transport (ADR 008, server-side build): the gateway pulls the
+/// pushed commit from the customer's GitHub and deploys it — no SSH, no
+/// direct push from here.
 fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
     let repo = ctx
         .repo

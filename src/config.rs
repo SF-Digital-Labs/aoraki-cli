@@ -39,7 +39,10 @@ pub struct EnvConfig {
     #[serde(default)]
     pub confirm: bool,
     /// "direct" (default): SSH push straight to the box (internal operators).
-    /// "gateway": deploy through aoraki-cli-api (customer path, ADR 008).
+    /// "gateway": deploy through aoraki-cli-api (server-side build, ADR 008).
+    /// "cloud": build the Dockerfile LOCALLY, push to the platform registry,
+    /// lease via the console (customer path — needs `port`, docker installed,
+    /// and a registry login).
     pub transport: Option<String>,
     /// Which Aoraki remote gets this environment's deploy events
     /// (default: [defaults].remote in the global config, or the sole remote).
@@ -62,6 +65,9 @@ pub struct EnvConfig {
 impl EnvConfig {
     pub fn is_gateway(&self) -> bool {
         self.transport.as_deref() == Some("gateway")
+    }
+    pub fn is_cloud(&self) -> bool {
+        self.transport.as_deref() == Some("cloud")
     }
 }
 

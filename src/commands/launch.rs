@@ -124,6 +124,26 @@ pub fn run(args: LaunchArgs) -> Result<()> {
     println!("deployment {dep_hex} registered — waiting for the lease…");
     println!("{DIM}(safe to close this terminal — the deploy continues server-side; watch it at {}/deployments/{dep_hex}){RESET}", console.console_base());
 
+    let fqdn = wait_for_lease_banner(&console, &dep_hex)?;
+
+    if let Some(domain) = &args.domain {
+        console.post(
+            &format!("/orgs/{}/deployments/{dep_hex}/domain", console.org_hex),
+            &json!({ "domain": domain }),
+        )?;
+        println!("domain {domain} claimed on-chain");
+        println!("  → point DNS at it: CNAME {domain} → {fqdn} (DNS only, no proxy)");
+        println!("  → TLS auto-issues once DNS resolves; if it stalls, `restart` the deployment");
+    }
+
+    Ok(())
+}
+
+
+/// Poll a container deployment until its lease is active, then print the
+/// DEPLOYED banner. Shared by `launch` (create) and `deploy` cloud
+/// transport (create or blue-green update). Returns the origin fqdn.
+pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<String> {
     // Poll until the lease is active (or the deploy fails). One in-place
     // status line; transient failures display as reconnecting and never
     // kill the wait — only the overall timeout does.
@@ -188,18 +208,7 @@ pub fn run(args: LaunchArgs) -> Result<()> {
         rows.push(("origin", format!("{DIM}{fqdn}{RESET}")));
     }
     print_banner("DEPLOYED", &rows);
-
-    if let Some(domain) = &args.domain {
-        console.post(
-            &format!("/orgs/{}/deployments/{dep_hex}/domain", console.org_hex),
-            &json!({ "domain": domain }),
-        )?;
-        println!("domain {domain} claimed on-chain");
-        println!("  → point DNS at it: CNAME {domain} → {fqdn} (DNS only, no proxy)");
-        println!("  → TLS auto-issues once DNS resolves; if it stalls, `restart` the deployment");
-    }
-
-    Ok(())
+    Ok(fqdn)
 }
 
 /// GPU deploy path. The console picks the Aoraki GPU (or honours a pinned
