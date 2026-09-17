@@ -151,7 +151,11 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
     let mut default_domain: Option<String> = None;
     let mut consecutive_failures = 0u32;
     let line = StatusLine::new();
+    let deadline = std::time::Instant::now() + POLL_INTERVAL * POLL_ATTEMPTS;
     for _attempt in 0..POLL_ATTEMPTS {
+        if std::time::Instant::now() > deadline {
+            break; // wall-clock bound: slow/hanging polls must not stretch 3m into 40
+        }
         std::thread::sleep(POLL_INTERVAL);
         let dep = match console.get(&format!("/orgs/{}/deployments/{dep_hex}", console.org_hex)) {
             Ok(v) => {
@@ -192,7 +196,10 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
         }
     }
     line.finish();
-    let fqdn = fqdn.context("timed out waiting for the lease — check `deployments` in the console")?;
+    let fqdn = fqdn.context(
+        "timed out waiting for the lease — open the deployment in the console; \
+         if it shows failed, just `aoraki deploy` again (failed names are reusable)",
+    )?;
     // The branded default domain is assigned server-side just as the lease
     // goes active; it may not be on the row the instant we read it, so fall
     // back to the origin fqdn and mention it's still provisioning.
@@ -248,7 +255,11 @@ pub(crate) fn run_gpu(
     let mut node_url = None;
     let mut consecutive_failures = 0u32;
     let line = StatusLine::new();
+    let deadline = std::time::Instant::now() + POLL_INTERVAL * GPU_POLL_ATTEMPTS;
     for _attempt in 0..GPU_POLL_ATTEMPTS {
+        if std::time::Instant::now() > deadline {
+            break;
+        }
         std::thread::sleep(POLL_INTERVAL);
         let dep = match console.get(&format!("/orgs/{}/gpu-deploys/{gpu_hex}", console.org_hex)) {
             Ok(v) => {
