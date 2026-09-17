@@ -120,7 +120,11 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
         actor,
         cli_version: env!("CARGO_PKG_VERSION").to_string(),
     };
-    aoraki::report(&ctx.global, ctx.env().remote.as_deref(), &event);
+    aoraki::report(
+        &ctx.global,
+        ctx.env().remote.as_deref().or(ctx.repo.app.org.as_deref()),
+        &event,
+    );
 
     if succeeded {
         println!(
@@ -172,7 +176,22 @@ fn lease_deploy(ctx: &Ctx, short: &str) -> Result<()> {
     let process_type = env_cfg.process_type.as_deref().unwrap_or("web");
     let name = ctx.app().to_string();
 
-    let console = crate::console::Console::connect(env_cfg.remote.as_deref())?;
+    // Env remote pin → the app's org id → the machine default. The org
+    // pin is also a GUARD: a resolved remote for some other org refuses.
+    let remote_pref = env_cfg
+        .remote
+        .as_deref()
+        .or(ctx.repo.app.org.as_deref());
+    let console = crate::console::Console::connect(remote_pref)?;
+    if let Some(org_pin) = ctx.repo.app.org.as_deref() {
+        if org_pin.starts_with("org_") && console.org_hex != org_pin {
+            bail!(
+                "aoraki.toml pins org {org_pin} but remote '{}' is org {} ({}) — \
+                 wrong console org; fix the remote or the pin",
+                console.remote_name, console.org_hex, console.org_name
+            );
+        }
+    }
     let registry =
         std::env::var("AORAKI_REGISTRY").unwrap_or_else(|_| "registry.aoraki.cloud".to_string());
     let image = format!("{registry}/{}/{name}:{short}", console.org_hex);
@@ -312,7 +331,7 @@ fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
     // input the customer owns. The gateway re-checks at the exact commit.
     let dockerfile = ctx.env().dockerfile.as_deref().unwrap_or("Dockerfile");
     if !ctx.repo_root.join(dockerfile).exists() {
-        bail!("no {dockerfile} at the repo root — add one (or run `aoraki init` once it exists)");
+        bail!("no {dockerfile} at the repo root — add one");
     }
 
     // Only pushed commits deploy. This is a local heads-up; the gateway is

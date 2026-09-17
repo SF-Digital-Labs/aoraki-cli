@@ -15,6 +15,13 @@ pub struct RepoConfig {
 #[serde(deny_unknown_fields)]
 pub struct AppSection {
     pub name: String,
+    /// Org this app deploys under — the immutable org id (org_…, from the
+    /// console). Machine-readable provenance: every deploy from this repo
+    /// lands in that org unless an environment pins its own remote, and a
+    /// mismatched remote is refused rather than silently misfiled.
+    pub org: Option<String>,
+    /// Who authored this config (usr_… — informational provenance).
+    pub created_by: Option<String>,
     /// GitHub repo (owner/name) — required for gateway-transport environments.
     pub repo: Option<String>,
     /// Environment used when a command names none. Beats the global

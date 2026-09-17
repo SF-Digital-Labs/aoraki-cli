@@ -99,23 +99,30 @@
       afterwards: stream build output as it happens, tail live pod logs, check what's deployed
       against your local HEAD, and roll a restart without a rebuild. Every deploy is recorded on
       the box and reported to the <a href="https://aoraki.cloud" style="color:var(--accent)">Aoraki console</a>,
-      so your team sees who shipped what, where, and when. Only committed code deploys — there is
-      deliberately no way to push an uncommitted working tree.
+      so your team sees who shipped what, where, and when. Deploys are tagged by commit; an
+      uncommitted working tree is called out loudly before it ships.
     </p>
   </section>
 
   <section>
     <h2>Quick start</h2>
-    <pre><span class="c"># 1. Connect to your Aoraki console (opens the tokens page — paste a token)</span>
+    <pre><span class="c"># 1. Connect to your Aoraki console (opens the keys page — paste a key)</span>
 <span class="a">aoraki login</span>
 
-<span class="c"># 2. Describe your app once — aoraki.toml at the app root</span>
-<span class="a">aoraki link</span>      <span class="c"># sets up the deploy target (idempotent)</span>
-<span class="a">aoraki doctor</span>    <span class="c"># preflight the whole chain end-to-end</span>
+<span class="c"># 2. Describe your app once — aoraki.toml at the repo root</span>
+<span class="c">#    [app]</span>
+<span class="c">#    name = "myapp"</span>
+<span class="c">#    org = "org_…"          # your org id, from the console</span>
+<span class="c">#    [environments.production]</span>
+<span class="c">#    branch = "main"</span>
 
-<span class="c"># 3. Ship</span>
-<span class="a">aoraki deploy</span> staging
-<span class="a">aoraki logs</span> staging -f</pre>
+<span class="c"># 3. Ship — builds your Dockerfile locally, pushes to the Aoraki registry,</span>
+<span class="c">#    runs it in the Aoraki cloud, prints your live URL</span>
+<span class="a">aoraki deploy</span></pre>
+    <p class="d">The port comes from your Dockerfile's <code style="font-family:var(--mono)">EXPOSE</code>.
+      First deploy creates the app; every deploy after is a zero-downtime image update.
+      (Internal box environments — <code style="font-family:var(--mono)">server = …</code> — keep the
+      <code style="font-family:var(--mono)">link</code>/<code style="font-family:var(--mono)">doctor</code> ssh flow.)</p>
   </section>
 
   <section>
@@ -154,7 +161,7 @@
       <tr><td>aoraki link</td><td>set up bare repos + deploy hooks on each configured server (idempotent)</td></tr>
       <tr><td>aoraki connect github</td><td>connect an external provider (one-time) so repo-based deploys can build your code</td></tr>
       <tr><td>aoraki deploy [env]</td><td>push and deploy; production environments require typed confirmation</td></tr>
-      <tr><td>aoraki launch --image … --port …</td><td>deploy a container image to the Aoraki cloud (on-chain lease); add --gpu for GPU compute (bare = cheapest available, or pin a model)</td></tr>
+      <tr><td>aoraki launch --image …</td><td>advanced: run a PREBUILT image from a public registry (no repo, no build). Mostly used under the hood of GPU deploys (--gpu)</td></tr>
       <tr><td>aoraki logs [env] -f</td><td>follow application logs from the running pods</td></tr>
       <tr><td>aoraki status [env]</td><td>deployed commit vs local HEAD, pod readiness, drift</td></tr>
       <tr><td>aoraki deploys</td><td>recent deploy history</td></tr>
