@@ -36,12 +36,22 @@ impl Ctx {
         &self.repo.app.name
     }
 
-    pub fn ssh_target(&self) -> String {
-        config::resolve_target(&self.global, &self.env().server)
+    pub fn ssh_target(&self) -> Result<String> {
+        Ok(config::resolve_target(&self.global, self.env().server()?))
+    }
+
+    /// Box namespace; lease environments run in the Aoraki cloud instead.
+    pub fn namespace(&self) -> Result<&str> {
+        self.env().namespace.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "this is a lease environment - it runs in the Aoraki cloud, not \
+                 a k8s namespace; watch it in the console or use `aoraki deploy`"
+            )
+        })
     }
 
     pub fn ssh(&self) -> Result<Ssh> {
-        Ssh::new(self.ssh_target())
+        Ssh::new(self.ssh_target()?)
     }
 
     pub fn bare_repo(&self) -> String {
@@ -59,12 +69,12 @@ impl Ctx {
         format!("{}-deployment", self.app())
     }
 
-    pub fn push_url(&self) -> String {
-        format!("ssh://{}{}", self.ssh_target(), self.bare_repo())
+    pub fn push_url(&self) -> Result<String> {
+        Ok(format!("ssh://{}{}", self.ssh_target()?, self.bare_repo()))
     }
 
     pub fn kubectl(&self) -> String {
-        format!("sudo kubectl -n {}", self.env().namespace)
+        format!("sudo kubectl -n {}", self.env().namespace.as_deref().unwrap_or("default"))
     }
 
     pub fn deploy_log(&self) -> String {

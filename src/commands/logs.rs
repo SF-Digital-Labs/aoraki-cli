@@ -43,7 +43,7 @@ pub fn run(
             "dep=$({k} get deployments -o name | grep -m1 worker) \
              || {{ echo 'no worker deployment in namespace {ns}' >&2; exit 1; }}; \
              {k} logs \"$dep\"{opts}",
-            ns = ctx.env().namespace
+            ns = ctx.namespace()?
         ),
         // Every pod in the namespace (web + worker + redis), interleaved.
         // --prefix attributes each line to its pod; without it the merged

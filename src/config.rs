@@ -25,24 +25,26 @@ pub struct AppSection {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnvConfig {
-    /// SSH host alias (resolved via [servers] in the global config, else ~/.ssh/config)
-    pub server: String,
+    /// SSH host alias (resolved via [servers] in the global config, else
+    /// ~/.ssh/config). ABSENT = this is a LEASE environment (the default
+    /// customer path): build locally, push to the platform registry, run
+    /// as a Manifest lease via the console. No box, no ssh.
+    pub server: Option<String>,
     /// Ref the post-receive hook accepts for this environment
     pub branch: String,
-    pub namespace: String,
+    pub namespace: Option<String>,
     /// Path to the deploy script, relative to the repo root on the box
-    pub deploy_script: String,
+    pub deploy_script: Option<String>,
     pub url: Option<String>,
     /// Working checkout on the box; defaults to /data/repos/<app>
     pub workdir: Option<String>,
     /// Require typed confirmation before deploying
     #[serde(default)]
     pub confirm: bool,
-    /// "direct" (default): SSH push straight to the box (internal operators).
-    /// "gateway": deploy through aoraki-cli-api (server-side build, ADR 008).
-    /// "cloud": build the Dockerfile LOCALLY, push to the platform registry,
-    /// lease via the console (customer path — needs `port`, docker installed,
-    /// and a registry login).
+    /// Rarely needed: the transport is inferred — `server` present means
+    /// "direct" (SSH push to an internal box); absent means the LEASE path
+    /// (local docker build → registry → fred). Explicit values:
+    /// "direct" | "gateway" (server-side build, ADR 008) | "lease".
     pub transport: Option<String>,
     /// Which Aoraki remote gets this environment's deploy events
     /// (default: [defaults].remote in the global config, or the sole remote).
@@ -66,8 +68,28 @@ impl EnvConfig {
     pub fn is_gateway(&self) -> bool {
         self.transport.as_deref() == Some("gateway")
     }
-    pub fn is_cloud(&self) -> bool {
-        self.transport.as_deref() == Some("cloud")
+    /// The default customer path: explicit `transport = "lease"`, or no
+    /// transport AND no server (nothing to ssh to ⇒ it's a lease).
+    pub fn is_lease(&self) -> bool {
+        match self.transport.as_deref() {
+            Some("lease") => true,
+            None => self.server.is_none(),
+            _ => false,
+        }
+    }
+    /// SSH box for direct/gateway lanes; lease environments have none.
+    pub fn server(&self) -> Result<&str> {
+        self.server.as_deref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "this is a lease environment (no `server`) — it deploys to the \
+                 Aoraki cloud, not a box; this command needs a direct environment"
+            )
+        })
+    }
+    pub fn deploy_script(&self) -> Result<&str> {
+        self.deploy_script
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("lease environments have no deploy_script"))
     }
 }
 

@@ -25,7 +25,7 @@ pub fn run(env: Option<String>) -> Result<()> {
         "App:        {} ({} → {})",
         ctx.app(),
         ctx.env_name,
-        ctx.ssh_target()
+        ctx.ssh_target()?
     );
     println!("Local HEAD: {local}");
 

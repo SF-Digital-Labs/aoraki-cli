@@ -99,6 +99,28 @@ names still work; `aoraki whoami` records each remote's org (self-healing
 for configs from before this existed). A stale pin never breaks a deploy —
 the deploy runs and the CLI prints a note that the event wasn't reported.
 
+## Environments: lease (default) vs direct vs gateway
+
+An environment with **no `server`** is a **lease environment** — the
+default customer path: `aoraki deploy` builds the repo's Dockerfile
+locally, pushes to the platform registry, and runs it as a Manifest
+lease via the console (create, then blue-green image updates). The port
+comes from the Dockerfile's `EXPOSE` (`port =` overrides). First-boot
+env can come from an uncommitted `.aoraki.env`; ongoing env lives in the
+console's env groups. Minimal customer config:
+
+```toml
+[app]
+name = "myapp"
+
+[environments.production]
+branch = "main"
+remote = "MyOrg"          # org name — or omit with a single remote
+```
+
+`server = "…"` makes it a **direct** environment (internal SSH push to a
+box); `transport = "gateway"` builds server-side from GitHub (ADR 008).
+
 ## Commands
 
 | Command | Purpose |

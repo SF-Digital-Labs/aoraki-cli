@@ -14,10 +14,17 @@ pub fn run() -> Result<()> {
     let mut warnings = 0usize;
 
     for (name, env) in &repo.environments {
-        let target = config::resolve_target(&global, &env.server);
+        if env.is_lease() {
+            println!("Skipping '{}' - lease environment (no box to link)", name);
+            continue;
+        }
+        let target = config::resolve_target(&global, env.server()?);
         println!(
             "Linking '{}' → {} (namespace {}, branch {})",
-            name, target, env.namespace, env.branch
+            name,
+            target,
+            env.namespace.as_deref().unwrap_or("-"),
+            env.branch
         );
         let ssh = Ssh::new(target.clone())?;
         let bare = format!("/data/git/{}.git", app);
@@ -52,7 +59,7 @@ pub fn run() -> Result<()> {
             sh_quote(app),
             sh_quote(&env.branch),
             sh_quote(&workdir),
-            sh_quote(&env.deploy_script),
+            sh_quote(env.deploy_script()?),
         ))
         .context("writing hook config")?;
         println!("  ✓ hook config");
@@ -62,7 +69,7 @@ pub fn run() -> Result<()> {
              [ -e {wd}/.deploy.env ] && echo denv_ok || echo denv_missing; \
              [ -f {wd}/{script} ] && echo script_ok || echo script_missing",
             wd = workdir,
-            script = env.deploy_script
+            script = env.deploy_script()?
         ))?;
         if checks.contains("dir_missing") {
             println!("  ⚠ workdir {} does not exist — clone the repo there first (playbook § 12)", workdir);
@@ -73,7 +80,7 @@ pub fn run() -> Result<()> {
             warnings += 1;
         }
         if checks.contains("script_missing") {
-            println!("  ⚠ deploy script {}/{} not found (will exist after first checkout if it's committed)", workdir, env.deploy_script);
+            println!("  ⚠ deploy script {}/{} not found (will exist after first checkout if it's committed)", workdir, env.deploy_script()?);
             warnings += 1;
         }
 

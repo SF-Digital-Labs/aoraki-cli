@@ -36,8 +36,8 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
         }
     }
 
-    if ctx.env().is_cloud() {
-        return cloud_deploy(&ctx, &short);
+    if ctx.env().is_lease() {
+        return lease_deploy(&ctx, &short);
     }
     if ctx.env().is_gateway() {
         return gateway_deploy(&ctx, &sha, &short);
@@ -48,8 +48,8 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
         ctx.app(),
         short,
         ctx.env_name,
-        ctx.env().namespace,
-        ctx.ssh_target()
+        ctx.namespace()?,
+        ctx.ssh_target()?
     );
 
     let ssh = ctx.ssh()?;
@@ -64,7 +64,7 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
         .env("GIT_SSH_COMMAND", ssh.git_ssh_command())
         .args([
             "push",
-            &ctx.push_url(),
+            &ctx.push_url()?,
             &format!("+{}:refs/heads/{}", sha, ctx.env().branch),
         ])
         .stderr(Stdio::piped())
@@ -110,8 +110,8 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
     let event = DeployEvent {
         app: ctx.app().to_string(),
         environment: ctx.env_name.clone(),
-        box_id: ctx.env().server.clone(),
-        namespace: ctx.env().namespace.clone(),
+        box_id: ctx.env().server()?.to_string(),
+        namespace: ctx.namespace()?.to_string(),
         build_ref: short.clone(),
         ref_name: ctx.env().branch.clone(),
         status: if succeeded { "succeeded" } else { "failed" }.to_string(),
@@ -156,17 +156,14 @@ fn sha_on_env_branch(ctx: &Ctx, sha: &str) -> bool {
     false
 }
 
-/// "cloud" transport: the customer path in three moves, all visible —
+/// LEASE deploys (the default customer path): three moves, all visible —
 /// build the Dockerfile LOCALLY, push to the platform registry, then
 /// lease via the console (create, or blue-green image update when the
 /// deployment already exists). Env on first create comes from an
 /// optional uncommitted `.aoraki.env`; ongoing env lives in the
 /// console's env groups (applied on every redeploy).
-fn cloud_deploy(ctx: &Ctx, short: &str) -> Result<()> {
+fn lease_deploy(ctx: &Ctx, short: &str) -> Result<()> {
     let env_cfg = ctx.env();
-    let port = env_cfg
-        .port
-        .context("cloud transport needs `port = <container port>` in this environment")?;
     let dockerfile = env_cfg.dockerfile.as_deref().unwrap_or("Dockerfile");
     if !ctx.repo_root.join(dockerfile).exists() {
         bail!("no {dockerfile} in the repo — cloud deploys build it locally");
@@ -202,6 +199,13 @@ fn cloud_deploy(ctx: &Ctx, short: &str) -> Result<()> {
     if !status.success() {
         bail!("docker build failed");
     }
+
+    // The Dockerfile declares the port (EXPOSE); `port =` in aoraki.toml
+    // only overrides it (multi-EXPOSE images must pick one).
+    let port = match env_cfg.port {
+        Some(p) => p,
+        None => exposed_port(&image)?,
+    };
 
     println!("→ pushing {image}");
     let status = Command::new("docker")
@@ -366,5 +370,31 @@ fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
         Ok(())
     } else {
         bail!("deploy failed — see output above");
+    }
+}
+
+/// Single EXPOSEd tcp port of a built image, from docker inspect.
+fn exposed_port(image: &str) -> Result<u16> {
+    let out = Command::new("docker")
+        .args(["image", "inspect", "--format", "{{json .Config.ExposedPorts}}", image])
+        .output()
+        .context("docker image inspect failed")?;
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let ports: Vec<u16> = raw
+        .trim()
+        .trim_matches('"')
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .split(',')
+        .filter_map(|entry| entry.split('"').nth(1))
+        .filter_map(|spec| spec.strip_suffix("/tcp"))
+        .filter_map(|p| p.parse().ok())
+        .collect();
+    match ports[..] {
+        [one] => Ok(one),
+        [] => bail!("the Dockerfile has no EXPOSE — add one, or set `port =` in this environment"),
+        _ => bail!(
+            "the Dockerfile EXPOSEs several ports ({ports:?}) — set `port =` in this environment to pick one"
+        ),
     }
 }

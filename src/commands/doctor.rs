@@ -17,11 +17,18 @@ pub fn run(env: Option<String>) -> Result<()> {
     let mut failed = false;
     for name in envs {
         let ctx = Ctx::load(Some(name))?;
+        if ctx.env().is_lease() {
+            println!(
+                "\nEnvironment '{}': lease (Aoraki cloud) - nothing to ssh; `aoraki deploy {}` builds locally and leases via the console",
+                ctx.env_name, ctx.env_name
+            );
+            continue;
+        }
         println!(
             "\nEnvironment '{}' ({} → {}):",
             ctx.env_name,
-            ctx.env().namespace,
-            ctx.ssh_target()
+            ctx.namespace().unwrap_or("?"),
+            ctx.ssh_target()?
         );
         failed |= !check_env(&ctx);
     }
@@ -64,7 +71,7 @@ fn check_env(ctx: &Ctx) -> bool {
         Ok(_) => println!("  ✓ ssh connectivity"),
         Err(err) => {
             println!("  ✗ ssh connectivity: {err}");
-            println!("    (check ~/.ssh/config for '{}' or add it under [servers] in the global config)", ctx.env().server);
+            println!("    (check ~/.ssh/config for '{}' or add it under [servers] in the global config)", ctx.env().server.as_deref().unwrap_or("?"));
             return false; // nothing else can run
         }
     }

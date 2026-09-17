@@ -45,7 +45,7 @@ pub fn run(env: Option<String>, limit: usize) -> Result<()> {
         println!(
             "No aoraki deploys recorded for {} on {} yet.",
             ctx.app(),
-            ctx.env().server
+            ctx.env().server.as_deref().unwrap_or("the aoraki cloud")
         );
         return Ok(());
     }
