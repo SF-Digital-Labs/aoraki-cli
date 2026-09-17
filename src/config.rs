@@ -20,7 +20,9 @@ pub struct AppSection {
     /// lands in that org unless an environment pins its own remote, and a
     /// mismatched remote is refused rather than silently misfiled.
     pub org: Option<String>,
-    /// Who authored this config (usr_… — informational provenance).
+    /// Who authored this config (usr_… — provenance for humans and
+    /// tooling; the CLI itself never reads it).
+    #[allow(dead_code)]
     pub created_by: Option<String>,
     /// GitHub repo (owner/name) — required for gateway-transport environments.
     pub repo: Option<String>,
@@ -65,6 +67,9 @@ pub struct EnvConfig {
     pub dockerfile: Option<String>,
     /// Lease service name (default "web").
     pub process_type: Option<String>,
+    /// Run this environment on an Aoraki GPU: "auto" (cheapest available)
+    /// or a model name from `aoraki gpus`. `aoraki deploy --gpu` overrides.
+    pub gpu: Option<String>,
     /// Extra names this environment answers to (e.g. staging: ["qa", "stg"]).
     /// Unique prefixes of the real name (prod → production) work without this.
     #[serde(default)]

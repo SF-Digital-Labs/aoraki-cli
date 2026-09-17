@@ -31,7 +31,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Whoami { remote, default } => whoami::run(remote, default),
         Command::Link => link::run(),
         Command::Connect { provider } => connect::run(provider),
-        Command::Deploy { env, git_ref } => deploy::run(env, git_ref),
+        Command::Deploy { env, git_ref, gpu } => deploy::run(env, git_ref, gpu),
         Command::Launch {
             image,
             port,

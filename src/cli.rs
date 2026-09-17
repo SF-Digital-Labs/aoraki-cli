@@ -56,6 +56,10 @@ pub enum Command {
         /// Commit/branch to deploy (default: HEAD)
         #[arg(long = "ref")]
         git_ref: Option<String>,
+        /// Run on an Aoraki GPU: bare --gpu picks the cheapest available,
+        /// or pin a model (see `aoraki gpus`). Overrides the env's gpu pin.
+        #[arg(long, num_args = 0..=1, default_missing_value = "auto", value_name = "MODEL")]
+        gpu: Option<String>,
     },
     /// Run a prebuilt container image in the Aoraki cloud (from source? see `aoraki deploy`)
     Launch {
@@ -241,7 +245,7 @@ mod tests {
     fn deploy_takes_a_ref_override() {
         let cli = parse(&["aoraki", "deploy", "production", "--ref", "abc123"]);
         match cli.command {
-            Command::Deploy { env, git_ref } => {
+            Command::Deploy { env, git_ref, .. } => {
                 assert_eq!(env.as_deref(), Some("production"));
                 assert_eq!(git_ref.as_deref(), Some("abc123"));
             }

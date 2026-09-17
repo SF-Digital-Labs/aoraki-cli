@@ -57,6 +57,11 @@ impl Console {
         Ok(console)
     }
 
+    /// The org key — also the registry password (token-auth realm).
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
     pub fn console_base(&self) -> &str {
         self.api.trim_end_matches("/api/v1")
     }

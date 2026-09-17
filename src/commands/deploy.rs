@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
-pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
+pub fn run(env: Option<String>, git_ref: Option<String>, gpu: Option<String>) -> Result<()> {
     let ctx = Ctx::load(env)?;
 
     let refspec = git_ref.unwrap_or_else(|| "HEAD".to_string());
@@ -37,7 +37,7 @@ pub fn run(env: Option<String>, git_ref: Option<String>) -> Result<()> {
     }
 
     if ctx.env().is_lease() {
-        return lease_deploy(&ctx, &short);
+        return lease_deploy(&ctx, &short, gpu);
     }
     if ctx.env().is_gateway() {
         return gateway_deploy(&ctx, &sha, &short);
@@ -166,7 +166,7 @@ fn sha_on_env_branch(ctx: &Ctx, sha: &str) -> bool {
 /// deployment already exists). Env on first create comes from an
 /// optional uncommitted `.aoraki.env`; ongoing env lives in the
 /// console's env groups (applied on every redeploy).
-fn lease_deploy(ctx: &Ctx, short: &str) -> Result<()> {
+fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<()> {
     let env_cfg = ctx.env();
     let dockerfile = env_cfg.dockerfile.as_deref().unwrap_or("Dockerfile");
     if !ctx.repo_root.join(dockerfile).exists() {
@@ -226,13 +226,39 @@ fn lease_deploy(ctx: &Ctx, short: &str) -> Result<()> {
         None => exposed_port(&image)?,
     };
 
+    registry_login(&registry, &console)?;
     println!("→ pushing {image}");
-    let status = Command::new("docker")
+    let mut pushed = Command::new("docker")
         .args(["push", &image])
         .status()
-        .context("failed to run docker push")?;
-    if !status.success() {
-        bail!("docker push failed — logged in? try: docker login {registry}");
+        .context("failed to run docker push")?
+        .success();
+    if !pushed {
+        // Stale ~/.docker credentials are the common cause — refresh the
+        // login from the org key and retry exactly once.
+        println!("→ push failed; refreshing registry login and retrying once");
+        registry_login(&registry, &console)?;
+        pushed = Command::new("docker")
+            .args(["push", &image])
+            .status()
+            .context("failed to run docker push")?
+            .success();
+    }
+    if !pushed {
+        bail!(
+            "docker push failed — key lacks push access to {image}? \
+             `aoraki whoami` to check the org; the registry only accepts \
+             pushes under your org's {}/… namespace",
+            console.org_hex
+        );
+    }
+
+    // GPU target (flag wins over the environment pin): same build+push,
+    // then the workload runs on an Aoraki GPU instead of a lease.
+    if let Some(gpu) = gpu_override.or(env_cfg.gpu.clone()) {
+        let env_map = read_dotenv(&ctx.repo_root.join(".aoraki.env"))?;
+        replace_existing_gpu(&console, &name)?;
+        return crate::commands::launch::run_gpu(&console, &name, &image, port, &gpu, env_map);
     }
 
     // Upsert: an existing live deployment gets a blue-green image update;
@@ -416,4 +442,58 @@ fn exposed_port(image: &str) -> Result<u16> {
             "the Dockerfile EXPOSEs several ports ({ports:?}) — set `port =` in this environment to pick one"
         ),
     }
+}
+
+/// Non-interactive `docker login` against the platform registry using the
+/// org key (token-auth realm treats it as the Basic password). Quiet on
+/// success; docker stores the credential for the push that follows.
+fn registry_login(registry: &str, console: &crate::console::Console) -> Result<()> {
+    let mut child = Command::new("docker")
+        .args(["login", registry, "-u", &console.org_hex, "--password-stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("failed to run docker login")?;
+    child
+        .stdin
+        .as_mut()
+        .context("docker login stdin")?
+        .write_all(console.token().as_bytes())?;
+    let out = child.wait_with_output()?;
+    if !out.status.success() {
+        bail!(
+            "registry login failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+/// GPU deploys have no blue-green update — replace = start new, remove the
+/// old one AFTER the new one is requested (the console/gpu-rm path stops
+/// its billing). Best-effort: a failure to remove is loud but non-fatal.
+fn replace_existing_gpu(console: &crate::console::Console, name: &str) -> Result<()> {
+    let list = console.get(&format!("/orgs/{}/gpu-deploys", console.org_hex))?;
+    let old: Vec<String> = list["data"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|d| {
+            d["name"].as_str() == Some(name)
+                && matches!(
+                    d["status"].as_str(),
+                    Some("requested") | Some("starting") | Some("running")
+                )
+        })
+        .filter_map(|d| d["hex_id"].as_str().or_else(|| d["id"].as_str()))
+        .map(String::from)
+        .collect();
+    for hex in old {
+        println!("→ replacing previous GPU deployment {hex} (un-deploying; billing stops)");
+        if let Err(e) = console.delete(&format!("/orgs/{}/gpu-deploys/{hex}", console.org_hex)) {
+            eprintln!("⚠ could not remove {hex}: {e:#} — check the console, it may still be billing");
+        }
+    }
+    Ok(())
 }

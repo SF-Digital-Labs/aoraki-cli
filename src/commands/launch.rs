@@ -100,7 +100,7 @@ pub fn run(args: LaunchArgs) -> Result<()> {
             // Default value means "not set"; anything else was explicit.
             println!("note: --size does not apply to GPU deploys (the GPU model determines the unit) — ignoring");
         }
-        return run_gpu(&console, &name, &args, &gpu, env_map);
+        return run_gpu(&console, &name, &args.image, args.port, &gpu, env_map);
     }
 
     println!(
@@ -214,24 +214,25 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
 /// GPU deploy path. The console picks the Aoraki GPU (or honours a pinned
 /// model) and starts the workload; we poll for the public endpoint. GPU
 /// workloads get a raw http://host:port endpoint — no FQDN/TLS layer yet.
-fn run_gpu(
+pub(crate) fn run_gpu(
     console: &Console,
     name: &str,
-    args: &LaunchArgs,
+    image: &str,
+    port: u16,
     gpu: &str,
     env_map: serde_json::Map<String, Value>,
 ) -> Result<()> {
     let gpu_field = if gpu == "auto" { Value::Null } else { Value::String(gpu.to_string()) };
     let which = if gpu == "auto" { "cheapest available GPU".to_string() } else { format!("GPU '{gpu}'") };
     println!(
-        "launching '{name}' → {} on {which} (org: {}, remote: {})",
-        args.image, console.org_name, console.remote_name
+        "launching '{name}' → {image} on {which} (org: {}, remote: {})",
+        console.org_name, console.remote_name
     );
 
     let body = json!({
         "name": name,
-        "image": args.image,
-        "port": args.port,
+        "image": image,
+        "port": port,
         "env": env_map,
         "gpu": gpu_field,
     });
