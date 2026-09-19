@@ -192,8 +192,14 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
             );
         }
     }
-    let registry =
-        std::env::var("AORAKI_REGISTRY").unwrap_or_else(|_| "registry.aoraki.cloud".to_string());
+    // Env override > the console's advertised registry (each env has its
+    // own) > the prod default for older consoles.
+    let registry = std::env::var("AORAKI_REGISTRY").unwrap_or_else(|_| {
+        console
+            .registry
+            .clone()
+            .unwrap_or_else(|| "registry.aoraki.cloud".to_string())
+    });
     let image = format!("{registry}/{}/{name}:{short}", console.org_hex);
 
     if git_capture(&ctx.repo_root, &["status", "--porcelain"])

@@ -16,6 +16,9 @@ pub struct Console {
     token: String,
     pub org_hex: String,
     pub org_name: String,
+    /// This env's image registry host, as advertised by the console
+    /// (envs have separate registries). None on older consoles.
+    pub registry: Option<String>,
     pub remote_name: String,
 }
 
@@ -43,6 +46,7 @@ impl Console {
             token,
             org_hex: String::new(),
             org_name: String::new(),
+            registry: None,
             remote_name: remote_name.to_string(),
         };
         let me = console.get("/cli/me")?;
@@ -54,6 +58,7 @@ impl Console {
             .as_str()
             .unwrap_or(&console.org_hex)
             .to_string();
+        console.registry = me["data"]["registry"].as_str().map(String::from);
         Ok(console)
     }
 
