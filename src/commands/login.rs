@@ -12,7 +12,7 @@
 
 use crate::{aoraki, config};
 use anyhow::{bail, Context, Result};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, IsTerminal, Write};
 
 /// The customer console. Internal/testnet consoles are reached with --url.
 const MAINNET_API_URL: &str = "https://aoraki.cloud/api/v1";
@@ -63,9 +63,19 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
     }
     let tokens_page = format!("{}/cli", console_base(&api_url));
     println!("Create a CLI key in the console: {tokens_page}");
-    if !no_browser {
-        let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-        let _ = std::process::Command::new(opener).arg(&tokens_page).status();
+    // Ask before hijacking the screen with a browser — someone who already
+    // has a key just wants to paste it. --no-browser or a non-interactive
+    // stdin (piped/scripted) skips the prompt and never opens anything.
+    if !no_browser && std::io::stdin().is_terminal() {
+        print!("Open it in your browser? [Y/n] ");
+        std::io::stdout().flush()?;
+        let mut answer = String::new();
+        std::io::stdin().lock().read_line(&mut answer)?;
+        let a = answer.trim().to_lowercase();
+        if a.is_empty() || a == "y" || a == "yes" {
+            let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+            let _ = std::process::Command::new(opener).arg(&tokens_page).status();
+        }
     }
 
     print!("Paste key (cli_…): ");
