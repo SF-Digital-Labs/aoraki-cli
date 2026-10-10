@@ -88,15 +88,6 @@ impl Console {
                 .send_json(body.clone()),
         )
     }
-
-    pub fn delete(&self, path: &str) -> Result<Value> {
-        parse(
-            self.agent
-                .delete(&format!("{}{path}", self.api))
-                .set("Authorization", &format!("Bearer {}", self.token))
-                .call(),
-        )
-    }
 }
 
 /// A console answer that wasn't success. `status` is None when the request

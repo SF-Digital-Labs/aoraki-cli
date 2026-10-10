@@ -140,14 +140,13 @@
 <span class="c"># or pin a model — quote names with spaces, as listed by `aoraki gpus`</span>
 <span class="a">aoraki launch</span> --image docker.io/you/inference:v1 --port 8000 --gpu <span class="a">"RTX 3060 12GB"</span>
 
-<span class="c"># container logs · un-deploy (ids are printed at launch and shown in the console)</span>
-<span class="a">aoraki gpu-logs</span> gpu_…
-<span class="a">aoraki gpu-rm</span> gpu_…</pre>
+<span class="c"># container logs (ids are printed at launch and shown in the console)</span>
+<span class="a">aoraki gpu-logs</span> gpu_…</pre>
     <p class="d">
       Bake models and weights into your image — GPU nodes don't guarantee outbound network,
       so runtime downloads may fail. Endpoints are plain HTTP on the node's port (no TLS/domain
-      layer yet). Billing runs per-hour from launch until <code style="font-family:var(--mono)">aoraki gpu-rm</code> —
-      un-deploy workloads you're not using.
+      layer yet). Billing runs per-hour from launch until you end the deployment in the console —
+      end workloads you're not using.
     </p>
   </section>
 
@@ -171,7 +170,6 @@
       <tr><td>aoraki config [env]</td><td>configmap/secret keys for the environment (names only, never values)</td></tr>
       <tr><td>aoraki gpus</td><td>GPU catalog — models, VRAM, $/hr, live availability</td></tr>
       <tr><td>aoraki gpu-logs id</td><td>container logs for a GPU deployment</td></tr>
-      <tr><td>aoraki gpu-rm id</td><td>un-deploy a GPU workload and stop its per-hour billing</td></tr>
       <tr><td>aoraki doctor</td><td>verify SSH, hooks, docker, kubectl, console token — with fix hints</td></tr>
     </table>
   </section>

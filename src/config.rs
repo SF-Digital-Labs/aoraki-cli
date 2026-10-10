@@ -70,6 +70,10 @@ pub struct EnvConfig {
     /// Run this environment on an Aoraki GPU: "auto" (cheapest available)
     /// or a model name from `aoraki gpus`. `aoraki deploy --gpu` overrides.
     pub gpu: Option<String>,
+    /// Cloud deployment name for this environment. Default: the app name
+    /// for production (or a repo's only environment), else `<app>-<env>`.
+    /// Set it to keep an existing deployment when adding environments.
+    pub name: Option<String>,
     /// Extra names this environment answers to (e.g. staging: ["qa", "stg"]).
     /// Unique prefixes of the real name (prod → production) work without this.
     #[serde(default)]
@@ -125,6 +129,9 @@ impl RepoConfig {
         for (name, env) in &self.environments {
             let field = |f: &str| format!("environments.{name}.{f}");
             check_word(&field("branch"), &env.branch)?;
+            if let Some(n) = &env.name {
+                check_word(&field("name"), n)?;
+            }
             if let Some(s) = &env.server {
                 check_word(&field("server"), s)?;
             }

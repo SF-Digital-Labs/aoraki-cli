@@ -211,7 +211,7 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
     }
     let size = env_cfg.size.as_deref().unwrap_or("docker-xlarge-storage");
     let process_type = env_cfg.process_type.as_deref().unwrap_or("web");
-    let name = ctx.app().to_string();
+    let name = ctx.deployment_name();
 
     // Env remote pin → the app's org id → the machine default. The org
     // pin is also a GUARD: a resolved remote for some other org refuses.
@@ -228,6 +228,24 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
             );
         }
     }
+    // GPU target (flag wins over the environment pin). Checked before the
+    // build: a model typo or an already-running workload fails in seconds.
+    let gpu = gpu_override.or_else(|| env_cfg.gpu.clone());
+    if let Some(gpu) = &gpu {
+        if gpu != "auto" {
+            let catalog = console.get(&format!("/orgs/{}/gpu-catalog", console.org_hex))?;
+            let known = catalog["data"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|g| g["name"].as_str() == Some(gpu.as_str()));
+            if !known {
+                bail!("GPU model '{gpu}' is not in the catalog — see `aoraki gpus`");
+            }
+        }
+        refuse_if_gpu_live(&console, &name)?;
+    }
+
     // Env override > the console's advertised registry (each console has
     // its own). No hardcoded fallback: guessing the prod registry would
     // push a testnet build there.
@@ -315,37 +333,14 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
         );
     }
 
-    // GPU target (flag wins over the environment pin): same build+push,
-    // then the workload runs on an Aoraki GPU instead of a lease.
-    if let Some(gpu) = gpu_override.or_else(|| env_cfg.gpu.clone()) {
+    // GPU target: same build+push, then the workload runs on an Aoraki
+    // GPU instead of a lease.
+    if let Some(gpu) = gpu {
         let env_map = read_dotenv(&ctx.repo_root.join(".aoraki.env"))?;
-        // Validate the model BEFORE touching any running workload: with
-        // single-GPU capacity the old one must be removed first, so the
-        // only safe order is check → remove → create → loud on failure.
-        if gpu != "auto" {
-            let catalog = console.get(&format!("/orgs/{}/gpu-catalog", console.org_hex))?;
-            let known = catalog["data"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|g| g["name"].as_str() == Some(gpu.as_str()));
-            if !known {
-                bail!("GPU model '{gpu}' is not in the catalog — see `aoraki gpus` (nothing was removed)");
-            }
+        if !env_map.is_empty() && dotenv_is_tracked(&ctx.repo_root) {
+            eprintln!("⚠ .aoraki.env is tracked by git — it holds secrets; add it to .gitignore");
         }
-        let removed = replace_existing_gpu(&console, &name, &env_map)?;
-        return crate::commands::launch::run_gpu(&console, &name, &image, port, &gpu, env_map)
-            .map_err(|e| {
-                if removed > 0 {
-                    anyhow::anyhow!(
-                        "{e:#}\n\n⚠ the previous GPU deployment was ALREADY REMOVED and nothing \
-                         is running for '{name}' — rerun `aoraki deploy --gpu` (or `aoraki gpus` \
-                         to check capacity) as soon as possible"
-                    )
-                } else {
-                    e
-                }
-            });
+        return crate::commands::launch::run_gpu(&console, &name, &image, port, &gpu, env_map);
     }
 
     // Upsert: an existing live deployment gets a blue-green image update;
@@ -648,17 +643,13 @@ fn registry_login(registry: &str, console: &crate::console::Console) -> Result<(
     Ok(())
 }
 
-/// GPU deploys have no blue-green update, and capacity may be a single
-/// card — so replace is REMOVE-FIRST by design (a create-first would
-/// deadlock on the occupied GPU). The caller pre-validates the model and
-/// screams if the create then fails. Returns how many were removed.
-fn replace_existing_gpu(
-    console: &crate::console::Console,
-    name: &str,
-    new_env: &serde_json::Map<String, serde_json::Value>,
-) -> Result<usize> {
+/// Ending a deployment is a console action (it stops billing and can't be
+/// undone), so the CLI never removes a running GPU workload — it refuses
+/// and points at the console. Checked BEFORE building, so nothing is
+/// wasted and nothing is touched.
+fn refuse_if_gpu_live(console: &crate::console::Console, name: &str) -> Result<()> {
     let list = console.get(&format!("/orgs/{}/gpu-deploys", console.org_hex))?;
-    let old: Vec<(String, bool)> = list["data"]
+    let live: Vec<String> = list["data"]
         .as_array()
         .into_iter()
         .flatten()
@@ -666,32 +657,25 @@ fn replace_existing_gpu(
             d["name"].as_str() == Some(name)
                 && matches!(
                     d["status"].as_str(),
-                    Some("requested") | Some("starting") | Some("running")
+                    Some("requested" | "starting" | "running")
                 )
         })
         .filter_map(|d| {
-            let hex = d["hex_id"].as_str().or_else(|| d["id"].as_str())?;
-            let had_env = d["env"].as_object().map(|m| !m.is_empty()).unwrap_or(false);
-            Some((hex.to_string(), had_env))
+            d["hex_id"]
+                .as_str()
+                .or_else(|| d["id"].as_str())
+                .map(String::from)
         })
         .collect();
-    let mut removed = 0usize;
-    for (hex, had_env) in old {
-        if had_env && new_env.is_empty() {
-            eprintln!(
-                "⚠ the running deployment has env vars but .aoraki.env is empty/missing — \
-                 the replacement will start with NO env (GPU deploys don't use console env groups)"
-            );
-        }
-        println!("→ replacing previous GPU deployment {hex} (un-deploying; billing stops)");
-        match console.delete(&format!("/orgs/{}/gpu-deploys/{hex}", console.org_hex)) {
-            Ok(_) => removed += 1,
-            Err(e) => eprintln!(
-                "⚠ could not remove {hex}: {e:#} — check the console, it may still be billing"
-            ),
-        }
+    if !live.is_empty() {
+        bail!(
+            "'{name}' is already running on a GPU ({}) — end it in the console first \
+             ({}/deployments), then deploy again. The CLI doesn't end deployments.",
+            live.join(", "),
+            console.console_base()
+        );
     }
-    Ok(removed)
+    Ok(())
 }
 
 /// True when .aoraki.env is tracked or would be committed (not ignored).
