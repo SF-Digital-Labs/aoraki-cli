@@ -37,6 +37,16 @@ pub fn run(env: Option<String>, git_ref: Option<String>, gpu: Option<String>) ->
     }
 
     if ctx.env().is_lease() {
+        // Lease deploys build the working tree, not a ref — refuse a ref
+        // that isn't what's checked out rather than label one commit's
+        // build with another's sha.
+        let head = git_capture(&ctx.repo_root, &["rev-parse", "--verify", "HEAD^{commit}"])?;
+        if head != sha {
+            bail!(
+                "'{refspec}' ({short}) is not the checked-out commit — cloud deploys build \
+                 the working tree; `git checkout {refspec}` first"
+            );
+        }
         return lease_deploy(&ctx, &short, gpu);
     }
     if ctx.env().is_gateway() {
@@ -75,32 +85,47 @@ pub fn run(env: Option<String>, git_ref: Option<String>, gpu: Option<String>) ->
     // hook's final sentinel line is our success signal — the push exit code
     // can't be, since post-receive failures don't fail the push.
     let mut outcome: Option<bool> = None;
+    let mut ignored = false;
     let stderr = child.stderr.take().expect("stderr was piped");
     for line in BufReader::new(stderr).lines() {
         let line = line?;
-        if line.contains("aoraki: deploy status: succeeded") {
-            outcome = Some(true);
-        } else if line.contains("aoraki: deploy status: failed") {
-            outcome = Some(false);
-        }
+        scan_hook_line(&line, &mut outcome, &mut ignored);
         let cleaned = line.strip_prefix("remote: ").unwrap_or(&line);
         println!("{cleaned}");
     }
     let push_ok = child.wait()?.success();
     if !push_ok && outcome.is_none() {
-        bail!("git push failed — run `aoraki doctor {}` to check the deploy chain", ctx.env_name);
+        bail!(
+            "git push failed — run `aoraki doctor {}` to check the deploy chain",
+            ctx.env_name
+        );
     }
 
     // Ref unchanged (redeploy of the already-deployed SHA): the hook never
     // fires on an up-to-date push, so invoke it directly.
-    if outcome.is_none() {
-        println!("→ ref unchanged on box; triggering deploy hook directly");
+    if outcome.is_none() && !ignored {
+        println!("→ ref unchanged on box; triggering deploy hook directly (output shows when it finishes)");
         let trigger = format!(
-            "echo '{sha} {sha} refs/heads/{branch}' | {bare}/hooks/post-receive",
+            "echo '{sha} {sha} refs/heads/{branch}' | {bare}/hooks/post-receive 2>&1",
             branch = ctx.env().branch,
             bare = ctx.bare_repo()
         );
-        outcome = Some(ssh.run(&trigger).is_ok());
+        // Judge by the hook's sentinel, not ssh's exit code: a hook that
+        // ignores the ref exits 0 having deployed nothing.
+        let out = ssh.capture(&trigger).unwrap_or_else(|e| format!("{e:#}"));
+        for line in out.lines() {
+            scan_hook_line(line, &mut outcome, &mut ignored);
+            println!("{line}");
+        }
+    }
+    if ignored && outcome.is_none() {
+        bail!(
+            "the box's hook ignored the push — it is linked for a different branch than \
+             '{}' (another environment on the same box, or `branch` changed since linking). \
+             Nothing was deployed; re-run `aoraki link {}`",
+            ctx.env().branch,
+            ctx.env_name
+        );
     }
 
     let succeeded = outcome == Some(true);
@@ -160,6 +185,18 @@ fn sha_on_env_branch(ctx: &Ctx, sha: &str) -> bool {
     false
 }
 
+/// Read one line of hook output: the final status sentinel, or the hook
+/// saying it ignored our ref (so nothing ran).
+fn scan_hook_line(line: &str, outcome: &mut Option<bool>, ignored: &mut bool) {
+    if line.contains("aoraki: deploy status: succeeded") {
+        *outcome = Some(true);
+    } else if line.contains("aoraki: deploy status: failed") {
+        *outcome = Some(false);
+    } else if line.contains("aoraki: ignoring refs/") {
+        *ignored = true;
+    }
+}
+
 /// LEASE deploys (the default customer path): three moves, all visible —
 /// build the Dockerfile LOCALLY, push to the platform registry, then
 /// lease via the console (create, or blue-green image update when the
@@ -178,36 +215,47 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
 
     // Env remote pin → the app's org id → the machine default. The org
     // pin is also a GUARD: a resolved remote for some other org refuses.
-    let remote_pref = env_cfg
-        .remote
-        .as_deref()
-        .or(ctx.repo.app.org.as_deref());
+    let remote_pref = env_cfg.remote.as_deref().or(ctx.repo.app.org.as_deref());
     let console = crate::console::Console::connect(remote_pref)?;
     if let Some(org_pin) = ctx.repo.app.org.as_deref() {
         if org_pin.starts_with("org_") && console.org_hex != org_pin {
             bail!(
                 "aoraki.toml pins org {org_pin} but remote '{}' is org {} ({}) — \
                  wrong console org; fix the remote or the pin",
-                console.remote_name, console.org_hex, console.org_name
+                console.remote_name,
+                console.org_hex,
+                console.org_name
             );
         }
     }
-    // Env override > the console's advertised registry (each env has its
-    // own) > the prod default for older consoles.
-    let registry = std::env::var("AORAKI_REGISTRY").unwrap_or_else(|_| {
-        console
-            .registry
-            .clone()
-            .unwrap_or_else(|| "registry.aoraki.cloud".to_string())
-    });
-    let image = format!("{registry}/{}/{name}:{short}", console.org_hex);
+    // Env override > the console's advertised registry (each console has
+    // its own). No hardcoded fallback: guessing the prod registry would
+    // push a testnet build there.
+    let registry = match std::env::var("AORAKI_REGISTRY") {
+        Ok(r) if !r.is_empty() => r,
+        _ => console.registry.clone().with_context(|| {
+            format!(
+                "console '{}' doesn't advertise a registry (older console?) — set AORAKI_REGISTRY",
+                console.remote_name
+            )
+        })?,
+    };
+    check_build_context(&ctx.repo_root)?;
 
-    if git_capture(&ctx.repo_root, &["status", "--porcelain"])
+    // Tags are never reused across different contents: a dirty build gets
+    // its own tag, so it can't overwrite the clean image of that commit
+    // that another environment may be running.
+    let dirty = git_capture(&ctx.repo_root, &["status", "--porcelain"])
         .map(|o| !o.trim().is_empty())
-        .unwrap_or(false)
-    {
-        println!("⚠ working tree has uncommitted changes — the image is built from the tree, tagged {short}");
-    }
+        .unwrap_or(false);
+    let tag = if dirty {
+        let stamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
+        println!("⚠ working tree has uncommitted changes — building them as {short}-dirty-{stamp}");
+        format!("{short}-dirty-{stamp}")
+    } else {
+        short.to_string()
+    };
+    let image = format!("{registry}/{}/{name}:{tag}", console.org_hex);
 
     println!(
         "→ building {name} {short} from {dockerfile} → {image} (org: {}, remote: {})",
@@ -216,8 +264,14 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
     let status = Command::new("docker")
         .current_dir(&ctx.repo_root)
         .args([
-            "build", "-f", dockerfile, "-t", &image,
-            "--build-arg", &format!("BUILD_HASH={short}"), ".",
+            "build",
+            "-f",
+            dockerfile,
+            "-t",
+            &image,
+            "--build-arg",
+            &format!("BUILD_HASH={short}"),
+            ".",
         ])
         .status()
         .context("failed to run docker build — is docker installed and running?")?;
@@ -313,7 +367,9 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
 
     let dep_hex = match existing_hex {
         Some(hex) => {
-            println!("→ updating deployment {hex} (blue-green image swap; env from console groups)");
+            println!(
+                "→ updating deployment {hex} (blue-green image swap; env from console groups)"
+            );
             console
                 .post(
                     &format!("/orgs/{}/deployments/{hex}/redeploy", console.org_hex),
@@ -332,7 +388,9 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
         None => {
             let env_map = read_dotenv(&ctx.repo_root.join(".aoraki.env"))?;
             if !env_map.is_empty() && dotenv_is_tracked(&ctx.repo_root) {
-                eprintln!("⚠ .aoraki.env is tracked by git — it holds secrets; add it to .gitignore");
+                eprintln!(
+                    "⚠ .aoraki.env is tracked by git — it holds secrets; add it to .gitignore"
+                );
             }
             if !env_map.is_empty() {
                 println!(
@@ -366,26 +424,89 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
     Ok(())
 }
 
+/// Files that hold secrets and must never reach the image: the build
+/// context is the repo root, so a `COPY . .` would bake them into a layer
+/// pushed to the registry (and, for GPUs, run on third-party hosts).
+const SECRET_FILES: &[&str] = &[".aoraki.env", ".env"];
+
+/// Refuse to build when a secrets file exists but `.dockerignore` doesn't
+/// exclude it. A plain line match — the common `.env*` / `*.env` globs
+/// count; anything cleverer, add the exact name.
+fn check_build_context(root: &std::path::Path) -> Result<()> {
+    let ignore = std::fs::read_to_string(root.join(".dockerignore")).unwrap_or_default();
+    let ignored = |f: &str| {
+        ignore.lines().map(str::trim).any(|l| {
+            let l = l.trim_start_matches("**/").trim_start_matches('/');
+            l == f
+                || (l == ".env*" && f.starts_with(".env"))
+                || (l == "*.env" && f.ends_with(".env"))
+                || l == "*"
+        })
+    };
+    let exposed: Vec<&str> = SECRET_FILES
+        .iter()
+        .copied()
+        .filter(|f| root.join(f).exists() && !ignored(f))
+        .collect();
+    if !exposed.is_empty() {
+        bail!(
+            "{} would be sent to docker build (the context is the repo root) and could \
+             end up inside the image — add {} to .dockerignore",
+            exposed.join(", "),
+            exposed.join(" and ")
+        );
+    }
+    Ok(())
+}
+
 /// KEY=VALUE lines, # comments; missing file → empty map. Never committed
 /// (add .aoraki.env to .gitignore) — it exists for the FIRST cloud deploy;
-/// console env groups own ongoing configuration.
+/// console env groups own ongoing configuration. Accepts the usual dotenv
+/// spellings: `export KEY=v`, single/double-quoted values (quotes
+/// stripped; `#` inside quotes kept), and ` # comment` after a bare value.
 fn read_dotenv(path: &std::path::Path) -> Result<serde_json::Map<String, serde_json::Value>> {
-    let mut map = serde_json::Map::new();
     let Ok(text) = std::fs::read_to_string(path) else {
-        return Ok(map);
+        return Ok(serde_json::Map::new());
     };
-    for line in text.lines() {
+    parse_dotenv(&text)
+}
+
+fn parse_dotenv(text: &str) -> Result<serde_json::Map<String, serde_json::Value>> {
+    let mut map = serde_json::Map::new();
+    for (i, line) in text.lines().enumerate() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (k, v) = line
-            .split_once('=')
-            .with_context(|| format!(".aoraki.env: '{line}' is not KEY=VALUE"))?;
-        map.insert(
-            k.trim().to_string(),
-            serde_json::Value::String(v.trim().to_string()),
-        );
+        let line = line
+            .strip_prefix("export ")
+            .map(str::trim_start)
+            .unwrap_or(line);
+        // Never echo the line: it may be a secret.
+        let bad = || anyhow::anyhow!(".aoraki.env line {}: expected KEY=VALUE", i + 1);
+        let (k, v) = line.split_once('=').ok_or_else(bad)?;
+        let k = k.trim();
+        let key_ok = !k.is_empty()
+            && !k.starts_with(|c: char| c.is_ascii_digit())
+            && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !key_ok {
+            return Err(bad());
+        }
+        let v = v.trim();
+        let value = match v.chars().next() {
+            Some(q @ ('"' | '\'')) => {
+                let rest = &v[1..];
+                let end = rest.find(q).ok_or_else(|| {
+                    anyhow::anyhow!(".aoraki.env line {}: unterminated quote (multi-line values aren't supported)", i + 1)
+                })?;
+                rest[..end].to_string()
+            }
+            _ => match v.find(" #") {
+                Some(pos) => v[..pos].trim_end().to_string(),
+                None => v.to_string(),
+            },
+        };
+        map.insert(k.to_string(), serde_json::Value::String(value));
     }
     Ok(map)
 }
@@ -394,12 +515,10 @@ fn read_dotenv(path: &std::path::Path) -> Result<serde_json::Map<String, serde_j
 /// pushed commit from the customer's GitHub and deploys it — no SSH, no
 /// direct push from here.
 fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
-    let repo = ctx
-        .repo
-        .app
-        .repo
-        .as_deref()
-        .context("gateway transport needs `repo = \"owner/name\"` under [app] in aoraki.toml")?;
+    let repo =
+        ctx.repo.app.repo.as_deref().context(
+            "gateway transport needs `repo = \"owner/name\"` under [app] in aoraki.toml",
+        )?;
 
     // Build-contract preflight (platform § 5): a Dockerfile is the one build
     // input the customer owns. The gateway re-checks at the exact commit.
@@ -410,14 +529,13 @@ fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
 
     // Only pushed commits deploy. This is a local heads-up; the gateway is
     // the authority (it 400s if the commit never reached GitHub).
-    let on_remote = git_capture(
-        &ctx.repo_root,
-        &["branch", "-r", "--contains", sha],
-    )
-    .map(|out| !out.is_empty())
-    .unwrap_or(false);
+    let on_remote = git_capture(&ctx.repo_root, &["branch", "-r", "--contains", sha])
+        .map(|out| !out.is_empty())
+        .unwrap_or(false);
     if !on_remote {
-        eprintln!("⚠ commit {short} doesn't appear on any remote branch — push first or this will fail");
+        eprintln!(
+            "⚠ commit {short} doesn't appear on any remote branch — push first or this will fail"
+        );
     }
 
     let gw = crate::gateway::Gateway::from_global(&ctx.global)?;
@@ -469,7 +587,13 @@ fn gateway_deploy(ctx: &Ctx, sha: &str, short: &str) -> Result<()> {
 /// Single EXPOSEd tcp port of a built image, from docker inspect.
 fn exposed_port(image: &str) -> Result<u16> {
     let out = Command::new("docker")
-        .args(["image", "inspect", "--format", "{{json .Config.ExposedPorts}}", image])
+        .args([
+            "image",
+            "inspect",
+            "--format",
+            "{{json .Config.ExposedPorts}}",
+            image,
+        ])
         .output()
         .context("docker image inspect failed")?;
     let raw = String::from_utf8_lossy(&out.stdout);
@@ -497,7 +621,13 @@ fn exposed_port(image: &str) -> Result<u16> {
 /// success; docker stores the credential for the push that follows.
 fn registry_login(registry: &str, console: &crate::console::Console) -> Result<()> {
     let mut child = Command::new("docker")
-        .args(["login", registry, "-u", &console.org_hex, "--password-stdin"])
+        .args([
+            "login",
+            registry,
+            "-u",
+            &console.org_hex,
+            "--password-stdin",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -556,7 +686,9 @@ fn replace_existing_gpu(
         println!("→ replacing previous GPU deployment {hex} (un-deploying; billing stops)");
         match console.delete(&format!("/orgs/{}/gpu-deploys/{hex}", console.org_hex)) {
             Ok(_) => removed += 1,
-            Err(e) => eprintln!("⚠ could not remove {hex}: {e:#} — check the console, it may still be billing"),
+            Err(e) => eprintln!(
+                "⚠ could not remove {hex}: {e:#} — check the console, it may still be billing"
+            ),
         }
     }
     Ok(removed)
@@ -570,4 +702,85 @@ fn dotenv_is_tracked(repo_root: &std::path::Path) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env(text: &str) -> serde_json::Map<String, serde_json::Value> {
+        parse_dotenv(text).expect("parses")
+    }
+
+    #[test]
+    fn hook_ignoring_the_ref_is_not_success() {
+        let (mut outcome, mut ignored) = (None, false);
+        scan_hook_line(
+            "remote: aoraki: ignoring refs/heads/prod (this box deploys refs/heads/qa)",
+            &mut outcome,
+            &mut ignored,
+        );
+        assert!(ignored && outcome.is_none());
+        scan_hook_line(
+            "remote: aoraki: deploy status: failed (exit 2 after 3s)",
+            &mut outcome,
+            &mut ignored,
+        );
+        assert_eq!(outcome, Some(false));
+        scan_hook_line(
+            "aoraki: deploy status: succeeded (9s)",
+            &mut outcome,
+            &mut ignored,
+        );
+        assert_eq!(outcome, Some(true));
+    }
+
+    #[test]
+    fn dotenv_strips_quotes_export_and_trailing_comments() {
+        let m = env(
+            "# comment\n\nexport A=1\nB=\"two words\"\nC='x # not a comment'\nD=bare # note\nE=\nF=a=b\n",
+        );
+        assert_eq!(m["A"], "1");
+        assert_eq!(m["B"], "two words");
+        assert_eq!(m["C"], "x # not a comment");
+        assert_eq!(m["D"], "bare");
+        assert_eq!(m["E"], "");
+        assert_eq!(m["F"], "a=b", "only the first = splits");
+    }
+
+    #[test]
+    fn dotenv_errors_never_echo_the_line() {
+        let err = parse_dotenv("A=1\nsk_live_SECRET\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("line 2"), "{err}");
+        assert!(!err.contains("SECRET"), "error leaked the line: {err}");
+        let err = parse_dotenv("BAD KEY=1\n").unwrap_err().to_string();
+        assert!(!err.contains("BAD KEY"), "{err}");
+        assert!(parse_dotenv("A=\"open\n").is_err(), "unterminated quote");
+    }
+
+    #[test]
+    fn build_context_refuses_unignored_secrets() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        assert!(check_build_context(root).is_ok(), "no secrets files: fine");
+
+        std::fs::write(root.join(".aoraki.env"), "A=1\n").unwrap();
+        let err = check_build_context(root).unwrap_err().to_string();
+        assert!(err.contains(".aoraki.env"), "{err}");
+
+        std::fs::write(root.join(".dockerignore"), "target\n.aoraki.env\n").unwrap();
+        assert!(check_build_context(root).is_ok());
+
+        std::fs::write(root.join(".env"), "B=2\n").unwrap();
+        assert!(check_build_context(root).is_err(), ".env not ignored yet");
+        std::fs::write(root.join(".dockerignore"), ".env*\n").unwrap();
+        assert!(
+            check_build_context(root).is_err(),
+            ".env* doesn't cover .aoraki.env"
+        );
+        std::fs::write(root.join(".dockerignore"), "**/*.env\n").unwrap();
+        assert!(check_build_context(root).is_ok(), "*.env covers both");
+    }
 }

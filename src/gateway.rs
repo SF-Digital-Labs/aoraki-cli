@@ -4,13 +4,18 @@
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::io::{BufRead, BufReader};
+use std::time::Duration;
 
 use crate::config::{GatewayConfig, GlobalConfig};
 
 pub struct Gateway {
+    agent: ureq::Agent,
     api_url: String,
     token: String,
 }
+
+/// JSON calls: the whole request, connect to last byte.
+const CALL_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl Gateway {
     pub fn from_global(global: &GlobalConfig) -> Result<Self> {
@@ -20,7 +25,15 @@ impl Gateway {
         let token = cfg
             .resolve_token()
             .context("no gateway token — set [gateway].token or the MANIFEST_TOKEN env var")?;
+        // No overall timeout on the agent (the SSE stream runs for the
+        // whole build), but a stream silent for 5 minutes is dead — fail
+        // rather than hang a CI job forever.
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(Duration::from_secs(10))
+            .timeout_read(Duration::from_secs(300))
+            .build();
         Ok(Self {
+            agent,
             api_url: cfg.api_url.trim_end_matches('/').to_string(),
             token,
         })
@@ -47,7 +60,9 @@ impl Gateway {
 
     pub fn post(&self, path: &str, body: Value) -> Result<Value> {
         Self::parse(
-            ureq::post(&self.url(path))
+            self.agent
+                .post(&self.url(path))
+                .timeout(CALL_TIMEOUT)
                 .set("Authorization", &format!("Bearer {}", self.token))
                 .send_json(body),
         )
@@ -55,7 +70,9 @@ impl Gateway {
 
     pub fn get(&self, path: &str) -> Result<Value> {
         Self::parse(
-            ureq::get(&self.url(path))
+            self.agent
+                .get(&self.url(path))
+                .timeout(CALL_TIMEOUT)
                 .set("Authorization", &format!("Bearer {}", self.token))
                 .call(),
         )
@@ -64,7 +81,9 @@ impl Gateway {
     /// Follow a deploy's SSE stream, printing log lines as they arrive.
     /// Returns the terminal status ("succeeded" / "failed").
     pub fn stream_deploy_events(&self, deploy_id: &str) -> Result<String> {
-        let resp = ureq::get(&self.url(&format!("/deploys/{deploy_id}/events")))
+        let resp = self
+            .agent
+            .get(&self.url(&format!("/deploys/{deploy_id}/events")))
             .set("Authorization", &format!("Bearer {}", self.token))
             .call()
             .map_err(|e| anyhow::anyhow!("event stream failed: {e}"))?;

@@ -26,7 +26,9 @@ struct StatusLine {
 
 impl StatusLine {
     fn new() -> Self {
-        Self { started: std::time::Instant::now() }
+        Self {
+            started: std::time::Instant::now(),
+        }
     }
     fn update(&self, status: &str) {
         use std::io::Write;
@@ -132,13 +134,16 @@ pub fn run(args: LaunchArgs) -> Result<()> {
             &json!({ "domain": domain }),
         )?;
         println!("domain {domain} claimed on-chain");
-        println!("  → point DNS at it: CNAME {domain} → {fqdn} (DNS only, no proxy)");
+        if fqdn.is_empty() {
+            println!("  → point DNS at it: CNAME {domain} → the origin shown in the console (DNS only, no proxy)");
+        } else {
+            println!("  → point DNS at it: CNAME {domain} → {fqdn} (DNS only, no proxy)");
+        }
         println!("  → TLS auto-issues once DNS resolves; if it stalls, `restart` the deployment");
     }
 
     Ok(())
 }
-
 
 /// Poll a container deployment until its lease is active, then print the
 /// DEPLOYED banner. Shared by `launch` (create) and `deploy` cloud
@@ -162,6 +167,10 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
                 consecutive_failures = 0;
                 v
             }
+            Err(e) if crate::console::ConsoleError::is_permanent(&e) => {
+                line.finish();
+                return Err(e.context(format!("checking deployment {dep_hex}")));
+            }
             Err(_) => {
                 consecutive_failures += 1;
                 line.reconnecting(consecutive_failures);
@@ -169,27 +178,47 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
             }
         };
         let d = &dep["data"]["deployment"];
-        let status = d["status"].as_str().or(d["health"].as_str()).unwrap_or("pending");
+        let status = d["status"]
+            .as_str()
+            .or(d["health"].as_str())
+            .unwrap_or("pending");
         let lease = d["lease_uuid"].as_str().unwrap_or("");
         match status {
-            "failed" => {
+            // Every ended state is final — waiting can't revive it.
+            "failed" | "closed" | "expired" | "rejected" => {
                 line.finish();
                 let note = dep["data"]["history"][0]["commit_message"]
                     .as_str()
                     .unwrap_or("no failure detail recorded");
-                bail!("deploy failed: {note}");
+                bail!("deploy {status}: {note}");
             }
             "active" if !lease.is_empty() => {
                 line.finish();
                 let cost = d["hourly_cost_upwr"].as_i64().unwrap_or(0);
                 println!("lease {lease} active — {cost} µPWR/hr");
                 default_domain = d["default_domain"].as_str().map(String::from);
+                // The lease is up: a blip reading /live must not turn a
+                // successful deploy into a failed one — fall back to the
+                // branded domain.
                 let live = console
-                    .get(&format!("/orgs/{}/deployments/{dep_hex}/live", console.org_hex))?;
+                    .get(&format!(
+                        "/orgs/{}/deployments/{dep_hex}/live",
+                        console.org_hex
+                    ))
+                    .unwrap_or_default();
                 fqdn = live["data"]["connection"]["fqdn"]
                     .as_str()
                     .or_else(|| live["data"]["fqdn"].as_str())
-                    .map(String::from);
+                    .map(String::from)
+                    .or_else(|| default_domain.clone());
+                if fqdn.is_none() {
+                    println!("✓ lease active — the address isn't readable yet; see the console");
+                    println!(
+                        "  monitor: {}/deployments/{dep_hex}",
+                        console.console_base()
+                    );
+                    return Ok(String::new());
+                }
                 break;
             }
             _ => line.update(status),
@@ -209,7 +238,13 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
     };
     let mut rows = vec![
         ("live", live_url),
-        ("monitor", format!("{DIM}{}/deployments/{dep_hex}{RESET}", console.console_base())),
+        (
+            "monitor",
+            format!(
+                "{DIM}{}/deployments/{dep_hex}{RESET}",
+                console.console_base()
+            ),
+        ),
     ];
     if default_domain.is_some() {
         rows.push(("origin", format!("{DIM}{fqdn}{RESET}")));
@@ -229,8 +264,16 @@ pub(crate) fn run_gpu(
     gpu: &str,
     env_map: serde_json::Map<String, Value>,
 ) -> Result<()> {
-    let gpu_field = if gpu == "auto" { Value::Null } else { Value::String(gpu.to_string()) };
-    let which = if gpu == "auto" { "cheapest available GPU".to_string() } else { format!("GPU '{gpu}'") };
+    let gpu_field = if gpu == "auto" {
+        Value::Null
+    } else {
+        Value::String(gpu.to_string())
+    };
+    let which = if gpu == "auto" {
+        "cheapest available GPU".to_string()
+    } else {
+        format!("GPU '{gpu}'")
+    };
     println!(
         "launching '{name}' → {image} on {which} (org: {}, remote: {})",
         console.org_name, console.remote_name
@@ -245,7 +288,10 @@ pub(crate) fn run_gpu(
     });
     let created = console.post(&format!("/orgs/{}/gpu-deploys", console.org_hex), &body)?;
     let d = &created["data"];
-    let gpu_hex = d["hex_id"].as_str().context("gpu deploy accepted but no id returned")?.to_string();
+    let gpu_hex = d["hex_id"]
+        .as_str()
+        .context("gpu deploy accepted but no id returned")?
+        .to_string();
     let gpu_name = d["gpu_name"].as_str().unwrap_or("?").to_string();
     // Id printed BEFORE the wait: if anything below fails, the deploy is
     // still visible/cancellable from the console or another CLI call.
@@ -309,7 +355,10 @@ pub(crate) fn run_gpu(
         &[
             ("gpu", gpu_name.clone()),
             ("live", format!("{TEAL}{BOLD}{node_url}/{RESET}")),
-            ("monitor", format!("{DIM}{}/compute{RESET}", console.console_base())),
+            (
+                "monitor",
+                format!("{DIM}{}/compute{RESET}", console.console_base()),
+            ),
         ],
     );
     println!("{DIM}  note: GPU endpoints are plain http on the node's port — no TLS/domain layer yet{RESET}");

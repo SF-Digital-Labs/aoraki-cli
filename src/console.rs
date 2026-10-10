@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::config;
@@ -99,17 +99,51 @@ impl Console {
     }
 }
 
+/// A console answer that wasn't success. `status` is None when the request
+/// never got an HTTP answer (network, timeout) — the retryable kind.
+#[derive(Debug)]
+pub struct ConsoleError {
+    pub status: Option<u16>,
+    pub message: String,
+}
+
+impl std::fmt::Display for ConsoleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ConsoleError {}
+
+impl ConsoleError {
+    /// True for answers that won't change by asking again: bad key,
+    /// no access, gone. Polls stop on these instead of "reconnecting".
+    pub fn is_permanent(err: &anyhow::Error) -> bool {
+        err.downcast_ref::<ConsoleError>()
+            .and_then(|e| e.status)
+            .is_some_and(|s| matches!(s, 401 | 403 | 404))
+    }
+}
+
 fn parse(resp: std::result::Result<ureq::Response, ureq::Error>) -> Result<Value> {
     match resp {
         Ok(r) => Ok(r.into_json()?),
         Err(ureq::Error::Status(code, r)) => {
             let body: Value = r.into_json().unwrap_or(Value::Null);
-            let msg = body["error"]["message"]
+            let message = body["error"]["message"]
                 .as_str()
                 .map(String::from)
                 .unwrap_or_else(|| format!("HTTP {code}"));
-            bail!("{msg}");
+            Err(ConsoleError {
+                status: Some(code),
+                message,
+            }
+            .into())
         }
-        Err(e) => bail!("request failed: {e}"),
+        Err(e) => Err(ConsoleError {
+            status: None,
+            message: format!("request failed: {e}"),
+        }
+        .into()),
     }
 }

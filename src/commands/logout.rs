@@ -13,6 +13,23 @@ pub fn run(remote: Option<String>) -> Result<()> {
         return Ok(());
     }
     let (name, api_url) = (name.to_string(), cfg.api_url.clone());
+    // `aoraki deploy` logs docker into the org registry WITH this key, and
+    // docker keeps it in its own credential store — forget it there too,
+    // or the key outlives the logout. Best-effort: needs the console to
+    // name the registry, and docker to be installed.
+    if let Some(registry) = crate::console::Console::connect(Some(&name))
+        .ok()
+        .and_then(|c| c.registry)
+    {
+        let out = std::process::Command::new("docker")
+            .args(["logout", &registry])
+            .output();
+        if out.is_ok_and(|o| o.status.success()) {
+            println!("✓ docker logged out of {registry}");
+        } else {
+            eprintln!("⚠ could not run `docker logout {registry}` — run it yourself to drop the stored key");
+        }
+    }
     config::write_remote(&name, &api_url, None, None, None)?;
     println!("✓ logged out of '{name}' — token removed from config.toml");
     println!("  (revoke it in the console too if this machine is no longer trusted)");

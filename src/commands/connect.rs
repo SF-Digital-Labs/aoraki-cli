@@ -30,8 +30,7 @@ pub fn run(provider: String) -> Result<()> {
 
     println!("→ opening GitHub to install the Manifest app:");
     println!("  {install_url}");
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-    let _ = std::process::Command::new(opener).arg(&install_url).status();
+    let _ = crate::util::open_url(&install_url);
 
     println!("→ pick the repo(s) to grant read access, then come back here…");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);

@@ -54,6 +54,10 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
         }
     };
 
+    if !is_secure_url(&api_url) {
+        bail!("{api_url} is not https — the key would cross the network in cleartext (http is only allowed for localhost)");
+    }
+
     match &explicit_name {
         Some(name) => println!("Log in to '{name}' ({api_url})"),
         None => println!("Log in to {api_url} (remote will be named after your org)"),
@@ -73,8 +77,7 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
         std::io::stdin().lock().read_line(&mut answer)?;
         let a = answer.trim().to_lowercase();
         if a.is_empty() || a == "y" || a == "yes" {
-            let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-            let _ = std::process::Command::new(opener).arg(&tokens_page).status();
+            let _ = crate::util::open_url(&tokens_page);
         }
     }
 
@@ -114,7 +117,13 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
         }
     };
 
-    config::write_remote(&name, &api_url, Some(token), Some(&identity.org), identity.org_hex.as_deref())?;
+    config::write_remote(
+        &name,
+        &api_url,
+        Some(token),
+        Some(&identity.org),
+        identity.org_hex.as_deref(),
+    )?;
     let expires = identity.expires_at.split('T').next().unwrap_or_default();
     println!(
         "✓ logged in to '{}' as {} (org: {}, key: {})",
@@ -160,9 +169,21 @@ fn console_base(api_url: &str) -> String {
     api_url.trim_end_matches('/').to_string()
 }
 
+/// https anywhere; http only to this machine (local dev consoles).
+fn is_secure_url(url: &str) -> bool {
+    if url.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = url.strip_prefix("http://") else {
+        return false;
+    };
+    let host = rest.split(['/', ':']).next().unwrap_or("");
+    matches!(host, "localhost" | "127.0.0.1") || rest.starts_with("[::1]")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::slugify;
+    use super::{is_secure_url, slugify};
 
     #[test]
     fn org_names_become_clean_slugs() {
@@ -170,5 +191,16 @@ mod tests {
         assert_eq!(slugify("Sarson Funds"), "sarson-funds");
         assert_eq!(slugify("  Acme, Inc. "), "acme-inc");
         assert_eq!(slugify("日本"), "default");
+    }
+
+    #[test]
+    fn only_https_or_local_http_is_accepted() {
+        assert!(is_secure_url("https://aoraki.cloud/api/v1"));
+        assert!(is_secure_url("http://localhost:4700/api/v1"));
+        assert!(is_secure_url("http://127.0.0.1/api"));
+        assert!(is_secure_url("http://[::1]:4700/api"));
+        assert!(!is_secure_url("http://aoraki.cloud/api/v1"));
+        assert!(!is_secure_url("http://localhost.evil.com/api"));
+        assert!(!is_secure_url("ftp://x"));
     }
 }

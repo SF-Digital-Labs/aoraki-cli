@@ -1,5 +1,5 @@
 use crate::context::Ctx;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 
 pub fn run(env: Option<String>) -> Result<()> {
     let ctx = Ctx::load(env)?;
@@ -9,14 +9,5 @@ pub fn run(env: Option<String>) -> Result<()> {
             ctx.env_name
         );
     };
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    std::process::Command::new(opener)
-        .arg(url)
-        .status()
-        .with_context(|| format!("failed to run {opener}"))?;
-    Ok(())
+    crate::util::open_url(url)
 }

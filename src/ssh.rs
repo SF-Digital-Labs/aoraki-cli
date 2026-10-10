@@ -19,8 +19,7 @@ pub struct Ssh {
 impl Ssh {
     pub fn new(target: String) -> Result<Self> {
         let dir = crate::config::config_home().join("sockets");
-        std::fs::create_dir_all(&dir)
-            .with_context(|| format!("creating {}", dir.display()))?;
+        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -90,7 +89,9 @@ impl Ssh {
         if tty {
             cmd.arg("-t");
         }
-        cmd.arg(&self.target);
+        // `--` ends option parsing: a target can never be read as an ssh
+        // option (`-oProxyCommand=…` runs a local command).
+        cmd.arg("--").arg(&self.target);
         cmd
     }
 
@@ -107,11 +108,23 @@ impl Ssh {
     /// Run with a TTY for interactive/follow commands. Ctrl-C is forwarded to
     /// the remote process, so a non-zero exit here is normal — not an error.
     pub fn run_interactive(&self, remote: &str) -> Result<()> {
-        self.command(true)
+        self.run_interactive_status(remote)?;
+        Ok(())
+    }
+
+    /// Like `run_interactive`, but hands back the remote exit code so the
+    /// caller can pass it on (`aoraki run` in CI must fail when the command
+    /// fails). ssh's own failures (255) are still errors.
+    pub fn run_interactive_status(&self, remote: &str) -> Result<i32> {
+        let status = self
+            .command(true)
             .arg(remote)
             .status()
             .context("failed to spawn ssh — is it on PATH?")?;
-        Ok(())
+        if status.code() == Some(255) {
+            self.ensure_success(status, None)?;
+        }
+        Ok(status.code().unwrap_or(1))
     }
 
     /// Run a remote command and capture trimmed stdout.

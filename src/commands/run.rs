@@ -17,15 +17,34 @@ pub fn run(env: Option<String>, cmd: Vec<String>) -> Result<()> {
         ctx.deployment()
     ))?;
     if image.is_empty() {
-        bail!("could not resolve the deployed image for {}", ctx.deployment());
+        bail!(
+            "could not resolve the deployed image for {}",
+            ctx.deployment()
+        );
     }
 
-    let quoted = cmd.iter().map(|c| sh_quote(c)).collect::<Vec<_>>().join(" ");
+    let quoted = cmd
+        .iter()
+        .map(|c| sh_quote(c))
+        .collect::<Vec<_>>()
+        .join(" ");
     println!("→ one-off pod with image {image}");
-    ssh.run_interactive(&format!(
-        "{} run aoraki-run-$RANDOM --rm -it --restart=Never --image={} --command -- {}",
+    // Not -t when stdin isn't a terminal (CI): kubectl -it would refuse.
+    let tty = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        "-it"
+    } else {
+        "-i"
+    };
+    let code = ssh.run_interactive_status(&format!(
+        "{} run aoraki-run-$RANDOM --rm {tty} --restart=Never --image={} --command -- {}",
         ctx.kubectl(),
-        image,
+        sh_quote(&image),
         quoted
-    ))
+    ))?;
+    // The remote command's exit code is ours: `aoraki run prod -- migrate`
+    // in CI must fail the job when the migration fails.
+    if code != 0 {
+        std::process::exit(code);
+    }
+    Ok(())
 }

