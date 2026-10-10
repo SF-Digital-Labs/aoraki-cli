@@ -20,8 +20,14 @@ pub fn run(remote: Option<String>) -> Result<()> {
     println!("{}", "─".repeat(54));
     for g in &gpus {
         let name = g["name"].as_str().unwrap_or("?");
-        let vram = g["vram_gb"].as_i64().map(|v| format!("{v}G")).unwrap_or_else(|| "—".into());
-        let rate = g["hourly_rate_usd"].as_f64().map(|r| format!("{r:.2}")).unwrap_or_else(|| "—".into());
+        let vram = g["vram_gb"]
+            .as_i64()
+            .map(|v| format!("{v}G"))
+            .unwrap_or_else(|| "—".into());
+        let rate = g["hourly_rate_usd"]
+            .as_f64()
+            .map(|r| format!("{r:.2}"))
+            .unwrap_or_else(|| "—".into());
         let avail = g["available_count"].as_i64().unwrap_or(0);
         let usable = avail > 0 && g["is_available"].as_bool().unwrap_or(false);
         let dim = if usable { "" } else { "\x1b[2m" };
@@ -29,14 +35,19 @@ pub fn run(remote: Option<String>) -> Result<()> {
         println!("{dim}{name:<28} {vram:>6} {rate:>9} {avail:>7}{reset}");
     }
     println!("\ndeploy: aoraki launch --image IMG --port PORT --gpu \"MODEL\"   (or bare --gpu for cheapest available)");
-    println!("billing runs per-hour for the whole time a GPU deployment exists — un-deploy when done");
+    println!(
+        "billing runs per-hour for the whole time a GPU deployment exists — un-deploy when done"
+    );
     Ok(())
 }
 
 /// `aoraki gpu-logs <id>` — container logs for a GPU deployment.
 pub fn logs(id: String, remote: Option<String>) -> Result<()> {
     let console = Console::connect(remote.as_deref())?;
-    let resp = console.get(&format!("/orgs/{}/gpu-deploys/{}/logs", console.org_hex, id))?;
+    let resp = console.get(&format!(
+        "/orgs/{}/gpu-deploys/{}/logs",
+        console.org_hex, id
+    ))?;
     match resp["data"]["logs"].as_str() {
         Some(logs) if !logs.is_empty() => println!("{logs}"),
         _ => println!("no logs available yet — the workload may still be starting"),

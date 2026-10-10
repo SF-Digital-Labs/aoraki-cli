@@ -74,7 +74,10 @@ impl Ctx {
     }
 
     pub fn kubectl(&self) -> String {
-        format!("sudo kubectl -n {}", self.env().namespace.as_deref().unwrap_or("default"))
+        format!(
+            "sudo kubectl -n {}",
+            self.env().namespace.as_deref().unwrap_or("default")
+        )
     }
 
     pub fn deploy_log(&self) -> String {

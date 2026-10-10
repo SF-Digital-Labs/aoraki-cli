@@ -36,7 +36,12 @@ pub fn run() -> Result<()> {
         ssh.run(&format!(
             "mkdir -p /data/git && {{ [ -d {bare} ] || git init --bare -q {bare}; }}"
         ))
-        .with_context(|| format!("creating bare repo on {} — is /data writable by this user?", target))?;
+        .with_context(|| {
+            format!(
+                "creating bare repo on {} — is /data writable by this user?",
+                target
+            )
+        })?;
 
         // Deploy-log dir is best-effort here; the hook falls back to the bare
         // repo dir if /data/logs isn't writable.
@@ -72,11 +77,17 @@ pub fn run() -> Result<()> {
             script = env.deploy_script()?
         ))?;
         if checks.contains("dir_missing") {
-            println!("  ⚠ workdir {} does not exist — clone the repo there first (playbook § 12)", workdir);
+            println!(
+                "  ⚠ workdir {} does not exist — clone the repo there first (playbook § 12)",
+                workdir
+            );
             warnings += 1;
         }
         if checks.contains("denv_missing") {
-            println!("  ⚠ {}/.deploy.env missing — the manual ucn/dcn fallback won't work there", workdir);
+            println!(
+                "  ⚠ {}/.deploy.env missing — the manual ucn/dcn fallback won't work there",
+                workdir
+            );
             warnings += 1;
         }
         if checks.contains("script_missing") {
@@ -97,7 +108,9 @@ pub fn run() -> Result<()> {
     }
 
     if warnings > 0 {
-        println!("\nLinked with {warnings} warning(s) — see above. Run `aoraki doctor` after fixing.");
+        println!(
+            "\nLinked with {warnings} warning(s) — see above. Run `aoraki doctor` after fixing."
+        );
     } else {
         println!("\nAll environments linked. Try `aoraki doctor`, then `aoraki deploy <env>`.");
     }

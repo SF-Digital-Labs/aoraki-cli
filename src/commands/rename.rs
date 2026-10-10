@@ -20,7 +20,12 @@ pub fn run(old: String, new: String) -> Result<()> {
         bail!(
             "unknown remote '{}' (configured: {})",
             old,
-            global.remotes.keys().cloned().collect::<Vec<_>>().join(", ")
+            global
+                .remotes
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
         );
     }
     if global.remotes.contains_key(&new) {
@@ -53,9 +58,7 @@ pub fn run(old: String, new: String) -> Result<()> {
         ),
         None => {}
     }
-    println!(
-        "  other repos: grep for 'remote = \"{old}\"' in their aoraki.toml / manifest.toml"
-    );
+    println!("  other repos: grep for 'remote = \"{old}\"' in their aoraki.toml / manifest.toml");
     Ok(())
 }
 

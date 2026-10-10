@@ -71,7 +71,10 @@ fn check_env(ctx: &Ctx) -> bool {
         Ok(_) => println!("  ✓ ssh connectivity"),
         Err(err) => {
             println!("  ✗ ssh connectivity: {err}");
-            println!("    (check ~/.ssh/config for '{}' or add it under [servers] in the global config)", ctx.env().server.as_deref().unwrap_or("?"));
+            println!(
+                "    (check ~/.ssh/config for '{}' or add it under [servers] in the global config)",
+                ctx.env().server.as_deref().unwrap_or("?")
+            );
             return false; // nothing else can run
         }
     }
@@ -139,7 +142,9 @@ fn check_env(ctx: &Ctx) -> bool {
     match ssh.capture("sudo -n kubectl get nodes --no-headers 2>/dev/null | wc -l") {
         Ok(v) if v.trim().parse::<u32>().unwrap_or(0) > 0 => println!("  ✓ kubectl (via sudo)"),
         _ => {
-            println!("  ✗ `sudo kubectl` failed — check passwordless sudo for kubectl (playbook § 2)");
+            println!(
+                "  ✗ `sudo kubectl` failed — check passwordless sudo for kubectl (playbook § 2)"
+            );
             ok = false;
         }
     }

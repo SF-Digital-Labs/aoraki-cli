@@ -9,7 +9,10 @@ pub fn run(env: Option<String>) -> Result<()> {
     let local = git_capture(&ctx.repo_root, &["rev-parse", "--short=7", "HEAD"])?;
 
     let last_line = ssh
-        .capture(&format!("tail -n 1 {} 2>/dev/null || true", ctx.deploy_log()))
+        .capture(&format!(
+            "tail -n 1 {} 2>/dev/null || true",
+            ctx.deploy_log()
+        ))
         .unwrap_or_default();
     let last: Option<serde_json::Value> = serde_json::from_str(&last_line).ok();
 

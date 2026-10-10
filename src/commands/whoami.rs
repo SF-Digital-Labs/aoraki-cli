@@ -35,7 +35,11 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
     let default = global.defaults.remote.as_deref();
     let selected: Vec<(&str, &config::RemoteConfig)> = match &remote {
         Some(name) => vec![global.resolve_remote(Some(name))?],
-        None => global.remotes.iter().map(|(k, v)| (k.as_str(), v)).collect(),
+        None => global
+            .remotes
+            .iter()
+            .map(|(k, v)| (k.as_str(), v))
+            .collect(),
     };
 
     let mut failed = false;

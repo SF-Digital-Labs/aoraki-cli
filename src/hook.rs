@@ -104,7 +104,10 @@ mod tests {
     fn script_embeds_the_current_hook_version() {
         let s = script();
         assert!(s.contains(&format!("aoraki-hook-version: {HOOK_VERSION}")));
-        assert!(!s.contains("__VERSION__"), "placeholder must be substituted");
+        assert!(
+            !s.contains("__VERSION__"),
+            "placeholder must be substituted"
+        );
     }
 
     #[test]

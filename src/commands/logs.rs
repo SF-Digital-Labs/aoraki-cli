@@ -48,9 +48,7 @@ pub fn run(
         // Every pod in the namespace (web + worker + redis), interleaved.
         // --prefix attributes each line to its pod; without it the merged
         // stream is unreadable.
-        "all" => format!(
-            "{k} logs -l app --all-containers --prefix --max-log-requests=10{opts}"
-        ),
+        "all" => format!("{k} logs -l app --all-containers --prefix --max-log-requests=10{opts}"),
         other => bail!("unknown logs target '{other}' — use web, workers, or all"),
     };
 
