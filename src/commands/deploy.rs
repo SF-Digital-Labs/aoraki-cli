@@ -296,6 +296,9 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
 
     // Upsert: an existing live deployment gets a blue-green image update;
     // otherwise create (with first-boot env from .aoraki.env if present).
+    // "Live" is exactly the console's rule — pending or active. Ended
+    // deployments (closed, failed, expired, rejected) stay listed as
+    // history, and the name may be reused by a new deployment.
     let existing = console.get(&format!("/orgs/{}/deployments", console.org_hex))?;
     let existing_hex = existing["data"]
         .as_array()
@@ -303,8 +306,7 @@ fn lease_deploy(ctx: &Ctx, short: &str, gpu_override: Option<String>) -> Result<
         .flatten()
         .find(|d| {
             d["name"].as_str() == Some(name.as_str())
-                && d["status"].as_str() != Some("closed")
-                && d["status"].as_str() != Some("failed")
+                && matches!(d["status"].as_str(), Some("pending" | "active"))
         })
         .and_then(|d| d["hex_id"].as_str().or_else(|| d["id"].as_str()))
         .map(String::from);
