@@ -92,10 +92,13 @@ main() {
   fi
 
   echo "✓ installed: $version → $INSTALL_DIR/aoraki"
-  echo
-  echo "Next steps:"
-  echo "  aoraki login"
-  echo "  aoraki --help"
+  # `aoraki update` re-runs this installer; first-run hints don't apply.
+  if [ -z "${AORAKI_UPDATING:-}" ]; then
+    echo
+    echo "Next steps:"
+    echo "  aoraki login"
+    echo "  aoraki --help"
+  fi
 }
 
 main "$@"

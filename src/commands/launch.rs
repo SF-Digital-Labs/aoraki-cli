@@ -335,7 +335,7 @@ pub(crate) fn run_gpu(
             "failed" | "exited" => {
                 line.finish();
                 let err = d["error"].as_str().unwrap_or("no failure detail recorded");
-                bail!("gpu deploy did not start: {err}");
+                bail!("gpu deploy did not start: {err}{}", failure_hint(err));
             }
             "cancelled" => {
                 line.finish();

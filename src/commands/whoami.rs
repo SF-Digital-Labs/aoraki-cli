@@ -15,21 +15,8 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
     }
 
     if let Some(name) = &set_default {
-        if !global.remotes.contains_key(name) {
-            bail!(
-                "unknown remote '{}' (configured: {})",
-                name,
-                global
-                    .remotes
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        config::write_default_remote(name)?;
+        crate::commands::default_remote::set(&global, name)?;
         global.defaults.remote = Some(name.clone());
-        println!("✓ default remote is now '{name}'");
     }
 
     let default = global.defaults.remote.as_deref();

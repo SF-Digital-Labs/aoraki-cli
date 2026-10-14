@@ -33,6 +33,9 @@ Or via Homebrew:
 brew install sf-digital-labs/tap/aoraki
 ```
 
+Update later with `aoraki update` — it upgrades the way you installed
+(Homebrew or the install script; `--check` only checks).
+
 Or download a binary from [Releases](https://github.com/SF-Digital-Labs/aoraki-cli/releases),
 or build from source:
 
