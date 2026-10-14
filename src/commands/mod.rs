@@ -1,5 +1,6 @@
 mod config_cmd;
 mod connect;
+mod default_remote;
 mod deploy;
 mod deploys;
 mod doctor;
@@ -14,6 +15,7 @@ mod rename;
 mod restart;
 mod run;
 mod status;
+mod update;
 mod whoami;
 
 use crate::cli::{Cli, Command};
@@ -29,6 +31,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Logout { remote } => logout::run(remote),
         Command::Rename { old, new } => rename::run(old, new),
         Command::Whoami { remote, default } => whoami::run(remote, default),
+        Command::Default { remote } => default_remote::run(remote),
         Command::Link => link::run(),
         Command::Connect { provider } => connect::run(provider),
         Command::Deploy { env, git_ref, gpu } => deploy::run(env, git_ref, gpu),
@@ -68,6 +71,7 @@ pub fn dispatch(cli: Cli) -> Result<()> {
         Command::Restart { env } => restart::run(env),
         Command::Open { env } => open::run(env),
         Command::Doctor { env } => doctor::run(env),
+        Command::Update { check } => update::run(check),
         Command::Config { env } => config_cmd::run(env),
     }
 }

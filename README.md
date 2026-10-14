@@ -67,7 +67,7 @@ behind your key (SarsonDigital → `sarsondigital`).
 aoraki login                        # mainnet; new remote auto-named after your org
 aoraki login sarson-testnet --url https://testnet.aoraki.cloud/api/v1
 aoraki whoami                       # remotes + who each key maps to; → marks the default
-aoraki whoami --default sarson-testnet   # re-point the default ([defaults].remote)
+aoraki default sarson-testnet           # re-point the default ([defaults].remote)
 aoraki rename prod sarsondigital    # migrate an old name (env pins in aoraki.toml too)
 aoraki logout sarson-testnet        # forget the local token (revoke in the console too)
 ```
@@ -129,6 +129,8 @@ box); `transport = "gateway"` builds server-side from GitHub (ADR 008).
 | `aoraki logout [remote]` | Forget the stored token |
 | `aoraki rename <old> <new>` | Rename a remote (names follow the org) |
 | `aoraki whoami [remote] [--default <r>]` | Remotes + who each key maps to; → the default; `--default` re-points it |
+| `aoraki default [remote]` | Show the remotes and → the default, or switch it (`aoraki default prod`) |
+| `aoraki update [--check]` | Update the CLI the way it was installed (Homebrew, install script; source builds get instructions) |
 | `aoraki link` | Set up bare repos + deploy hooks on the boxes (idempotent) |
 | `aoraki deploy [env] [--ref <commit>]` | Push and deploy; production envs require typed confirmation |
 | `aoraki logs [env] [-f] [--since 1h] [--previous]` | App logs from the pods |

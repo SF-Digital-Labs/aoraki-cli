@@ -84,7 +84,7 @@ pub fn run(remote: Option<String>, set_default: Option<String>) -> Result<()> {
         let _ = config::write_remote(&name, &api_url, Some(&token), Some(&org), org_id.as_deref());
     }
     if remote.is_none() && default.is_none() && global.remotes.len() > 1 {
-        println!("\nno default set — `aoraki whoami --default <remote>` to pick one");
+        println!("\nno default set — `aoraki default <remote>` to pick one");
     }
     if failed {
         bail!("some remotes failed — log in again where needed");

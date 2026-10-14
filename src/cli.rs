@@ -42,6 +42,18 @@ pub enum Command {
         #[arg(long, value_name = "REMOTE")]
         default: Option<String>,
     },
+    /// Update the CLI the way it was installed (Homebrew, install script, …)
+    Update {
+        /// Only check whether a newer release exists
+        #[arg(long)]
+        check: bool,
+    },
+    /// Show or set the default remote (`aoraki default prod`) — the console
+    /// commands target when an environment doesn't pin one
+    Default {
+        /// Remote to make the default (omit to list remotes and the current one)
+        remote: Option<String>,
+    },
     /// Set up bare repos + deploy hooks on each configured server (idempotent)
     Link,
     /// Connect an external provider (one-time): `aoraki connect github`

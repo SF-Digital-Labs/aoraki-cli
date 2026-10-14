@@ -145,6 +145,17 @@ pub fn run(args: LaunchArgs) -> Result<()> {
     Ok(())
 }
 
+/// What to do about a failure the provider reported, when we know.
+pub(crate) fn failure_hint(note: &str) -> &'static str {
+    if note.contains("image not allowed") {
+        "\n  → the provider only runs images from registries on its allowlist; \
+         this image's registry isn't on it yet. Ask the provider to allow it, or \
+         push the image to a registry it accepts."
+    } else {
+        ""
+    }
+}
+
 /// Poll a container deployment until its lease is active, then print the
 /// DEPLOYED banner. Shared by `launch` (create) and `deploy` cloud
 /// transport (create or blue-green update). Returns the origin fqdn.
@@ -190,7 +201,7 @@ pub(crate) fn wait_for_lease_banner(console: &Console, dep_hex: &str) -> Result<
                 let note = dep["data"]["history"][0]["commit_message"]
                     .as_str()
                     .unwrap_or("no failure detail recorded");
-                bail!("deploy {status}: {note}");
+                bail!("deploy {status}: {note}{}", failure_hint(note));
             }
             "active" if !lease.is_empty() => {
                 line.finish();
@@ -364,4 +375,15 @@ pub(crate) fn run_gpu(
     println!("{DIM}  note: GPU endpoints are plain http on the node's port — no TLS/domain layer yet{RESET}");
     println!("{DIM}  billing runs per-hour until you un-deploy this workload{RESET}");
     Ok(())
+}
+
+#[cfg(test)]
+mod failure_hint_tests {
+    use super::failure_hint;
+
+    #[test]
+    fn image_not_allowed_says_what_to_do() {
+        assert!(failure_hint("rejected by the provider: image not allowed").contains("allowlist"));
+        assert_eq!(failure_hint("provider rejected the deploy: oom"), "");
+    }
 }

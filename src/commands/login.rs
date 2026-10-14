@@ -133,6 +133,17 @@ pub fn run(remote: Option<String>, url: Option<String>, no_browser: bool) -> Res
         identity.token_name,
     );
     println!("  valid until {expires} if unused — every CLI call extends it 90 days");
+    // A second console doesn't move the default: say where commands go.
+    let after = config::load_global()?;
+    match after.defaults.remote.as_deref() {
+        Some(d) if d != name => {
+            println!("  commands still target '{d}' by default — `aoraki default {name}` to switch")
+        }
+        None if after.remotes.len() > 1 => {
+            println!("  no default remote yet — `aoraki default {name}` to make it this one")
+        }
+        _ => {}
+    }
     Ok(())
 }
 
