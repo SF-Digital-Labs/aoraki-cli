@@ -37,6 +37,7 @@ impl Console {
             .to_string();
         let api = remote.api_url.trim_end_matches('/').to_string();
         let agent = ureq::AgentBuilder::new()
+            .user_agent(crate::util::USER_AGENT)
             .timeout(Duration::from_secs(60))
             .build();
 
@@ -108,11 +109,11 @@ impl std::error::Error for ConsoleError {}
 
 impl ConsoleError {
     /// True for answers that won't change by asking again: bad key,
-    /// no access, gone. Polls stop on these instead of "reconnecting".
+    /// no access, gone, CLI too old. Polls stop on these instead of "reconnecting".
     pub fn is_permanent(err: &anyhow::Error) -> bool {
         err.downcast_ref::<ConsoleError>()
             .and_then(|e| e.status)
-            .is_some_and(|s| matches!(s, 401 | 403 | 404))
+            .is_some_and(|s| matches!(s, 401 | 403 | 404 | 426))
     }
 }
 

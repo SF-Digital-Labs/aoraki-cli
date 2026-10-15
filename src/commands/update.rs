@@ -43,7 +43,7 @@ pub enum Install {
 
 pub fn run(check: bool) -> Result<()> {
     let current = env!("CARGO_PKG_VERSION");
-    let latest = latest_version().with_context(|| {
+    let latest = latest_version(std::time::Duration::from_secs(15)).with_context(|| {
         format!(
             "couldn't check GitHub for the latest release (offline, or rate-limited — \
              retry in a minute; or update with the installer: curl -fsSL {INSTALLER} | sh)"
@@ -189,16 +189,13 @@ fn installed_version(bin: &Path) -> Option<String> {
 }
 
 /// The latest release's version ("0.4.0"), from GitHub.
-fn latest_version() -> Result<String> {
+pub fn latest_version(timeout: std::time::Duration) -> Result<String> {
     let body: serde_json::Value = ureq::get(&format!(
         "https://api.github.com/repos/{REPO}/releases/latest"
     ))
-    .set(
-        "User-Agent",
-        concat!("aoraki-cli/", env!("CARGO_PKG_VERSION")),
-    )
+    .set("User-Agent", crate::util::USER_AGENT)
     .set("Accept", "application/vnd.github+json")
-    .timeout(std::time::Duration::from_secs(15))
+    .timeout(timeout)
     .call()?
     .into_json()?;
     let tag = body["tag_name"]

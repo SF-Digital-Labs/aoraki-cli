@@ -63,6 +63,7 @@ pub fn report(global: &GlobalConfig, remote_pref: Option<&str>, event: &DeployEv
 /// server, restarting the 90-day idle-expiry clock.
 pub fn whoami(api_url: &str, token: &str) -> Result<Identity> {
     let response = ureq::get(&format!("{}/cli/me", api_url.trim_end_matches('/')))
+        .set("User-Agent", crate::util::USER_AGENT)
         .set("Authorization", &format!("Bearer {token}"))
         .timeout(Duration::from_secs(10))
         .call();
@@ -77,12 +78,21 @@ pub fn whoami(api_url: &str, token: &str) -> Result<Identity> {
         Err(ureq::Error::Status(401 | 403, _)) => {
             bail!("key rejected — it may be revoked or expired (90 days unused)")
         }
+        // e.g. 426: this CLI is older than the server accepts.
+        Err(ureq::Error::Status(code, res)) => {
+            let body: serde_json::Value = res.into_json().unwrap_or_default();
+            match body["error"]["message"].as_str() {
+                Some(msg) => bail!("{msg}"),
+                None => bail!("aoraki returned HTTP {code}"),
+            }
+        }
         Err(err) => bail!("could not reach aoraki: {err}"),
     }
 }
 
 fn post(api_url: &str, token: &str, event: &DeployEvent) -> Result<()> {
     ureq::post(&format!("{}/cli/deploys", api_url.trim_end_matches('/')))
+        .set("User-Agent", crate::util::USER_AGENT)
         .set("Authorization", &format!("Bearer {token}"))
         .timeout(Duration::from_secs(5))
         .send_json(event)?;

@@ -1,4 +1,8 @@
 use anyhow::{bail, Result};
+
+/// Every request says which CLI made it, so the server can tell an
+/// outdated CLI to update (its CLI_MIN_VERSION).
+pub const USER_AGENT: &str = concat!("aoraki-cli/", env!("CARGO_PKG_VERSION"));
 use std::path::Path;
 
 /// Run a local git command in `dir` and capture trimmed stdout.

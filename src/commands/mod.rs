@@ -15,7 +15,7 @@ mod rename;
 mod restart;
 mod run;
 mod status;
-mod update;
+pub mod update;
 mod whoami;
 
 use crate::cli::{Cli, Command};

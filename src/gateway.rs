@@ -29,6 +29,7 @@ impl Gateway {
         // whole build), but a stream silent for 5 minutes is dead — fail
         // rather than hang a CI job forever.
         let agent = ureq::AgentBuilder::new()
+            .user_agent(crate::util::USER_AGENT)
             .timeout_connect(Duration::from_secs(10))
             .timeout_read(Duration::from_secs(300))
             .build();

@@ -34,7 +34,11 @@ brew install sf-digital-labs/tap/aoraki
 ```
 
 Update later with `aoraki update` — it upgrades the way you installed
-(Homebrew or the install script; `--check` only checks).
+(Homebrew or the install script; `--check` only checks). About once a
+day the CLI checks for a newer release and, if there is one, says so in
+one line after the command finishes. It stays quiet in scripts and CI
+(stderr not a terminal, or `CI` set); `AORAKI_NO_UPDATE_CHECK=1` turns
+it off.
 
 Or download a binary from [Releases](https://github.com/SF-Digital-Labs/aoraki-cli/releases),
 or build from source:
